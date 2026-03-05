@@ -1,0 +1,17 @@
+Language: Cpp
+BasedOnStyle: LLVM
+IndentWidth: 4
+BreakBeforeBraces: Attach
+
+AlignConsecutiveAssignments:
+  Enabled: true
+AlignConsecutiveFunctionArgs:
+  Enabled: true
+AlignConsecutiveDeclarations:
+  Enabled: true
+
+AlignTrailingComments: true
+SortIncludes: CaseSensitive
+AllowShortFunctionsOnASingleLine: Empty
+SpaceAfterCStyleCast: true
+KeepEmptyLinesAtTheStartOfBlocks: false
