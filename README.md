@@ -44,3 +44,57 @@ System będzie oparty na architekturze klient-serwer z wykorzystaniem mikroserwi
 * **Baza Danych:** PostgreSQL.
 * **Narzędzia budowania:** Maven (dla Javy), CMake (dla C++).
 * **Kontrola wersji i praca grupowa:** Git, GitHub.
+
+---
+
+**Wymagania:**
+
+* Java 21 (JDK), Maven 3.9+
+* CMake 3.28+, kompilator C++23 (GCC 13+ / Clang 17+)
+* PostgreSQL 15+ - backend domyślnie używa H2 in-memory
+
+**Budowanie i uruchamianie:**
+
+**Cały ekosystem Java:**
+```bash
+cd java-ecosystem
+mvn clean install        # kompilacja + instalacja artefaktów w lokalnym repo
+mvn clean compile        # tylko kompilacja
+```
+
+**engine-cpp** - silnik:
+```bash
+cd engine-cpp
+cmake -B build -DCMAKE_BUILD_TYPE=Release   # konfiguracja (pobiera zależności)
+cmake --build build -j$(nproc)              # kompilacja
+./build/bland-circuit-simulator             # uruchomienie (serwer HTTP na domyślnym porcie)
+```
+
+**shared-models** - współdzielone modele (Java records):
+```bash
+cd java-ecosystem/shared-models
+mvn clean install    # kompilacja i instalacja JAR-a do lokalnego repo Maven
+```
+> Moduł biblioteczny - nie uruchamia się samodzielnie.
+
+**backend-spring** - backend REST API (Spring Boot):
+```bash
+cd java-ecosystem/backend-spring
+mvn clean compile                       # kompilacja
+mvn spring-boot:run                     # uruchomienie (domyślnie port 8080, baza H2 in-memory)
+mvn test                                # testy jednostkowe
+```
+
+**desktop-javafx** - aplikacja desktopowa (JavaFX):
+```bash
+cd java-ecosystem/desktop-javafx
+mvn clean compile                       # kompilacja
+mvn javafx:run                          # uruchomienie aplikacji okienkowej
+```
+
+**web-app** - aplikacja webowa (Vaadin + Spring Boot):
+```bash
+cd java-ecosystem/web-app
+mvn clean compile                       # kompilacja
+mvn spring-boot:run                     # uruchomienie (domyślnie port 8080)
+```
