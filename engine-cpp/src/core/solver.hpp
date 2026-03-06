@@ -9,6 +9,8 @@ namespace core {
 
 struct SimulationResult {
     std::string                      analysis_type;
+    std::vector<std::string>         node_names;
+    std::vector<std::string>         source_names;
     std::vector<double>              time_points;
     std::vector<std::vector<double>> node_voltages;
     std::vector<std::vector<double>> branch_currents;
