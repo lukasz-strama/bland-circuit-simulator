@@ -12,19 +12,17 @@ System będzie oparty na architekturze klient-serwer z wykorzystaniem mikroserwi
 
 **4. Podział pracy:**
 
-* **Osoba 1: Silnik obliczeniowy**
-    * Silnik symulacyjny w C/C++.
-    * Opracowanie parsera netlisty.
-    * Implementacja algorytmów numerycznych (MNA, rozwiązywanie układów równań).
-    * Wystawienie silnika jako serwera HTTP (Crow).
-    * Implementacja logiki integracyjnej komunikującej się z backendem w Javie.
+* **Osoba 1: Silnik obliczeniowy** ([github.com/lukasz-strama](https://github.com/lukasz-strama))
+    * Silnik symulacyjny w C/C++. Algorytmy numeryczne (MNA, rozwiązywanie układów równań).
+    * Wystawienie silnika jako mikroserwisu HTTP (przy użyciu biblioteki Crow) oraz napisanie parsera danych wejściowych.
+    * Współtworzenie modułu shared-models w środowisku Java.
 
 * **Osoba 2: Backend i baza danych**
     * Projekt i wdrożenie bazy danych.
     * Stworzenie REST API do obsługi kont użytkowników i zapisu projektów (JSON).
-    * Implementacja logiki integracyjnej komunikującej się z silnikiem C++.
+    * Implementacja klienta HTTP w backendzie.
 
-* **Osoba 3: Aplikacja desktopowa**
+* **Osoba 3: Aplikacja desktopowa** ([github.com/Wik-toria](https://github.com/Wik-toria))
     * Stworzenie interfejsu użytkownika aplikacji okienkowej.
     * Implementacja interaktywnego edytora schematów obwodów (Canvas).
     * Integracja z REST API (logowanie, zapis, symulacja) i generowanie wykresów.
