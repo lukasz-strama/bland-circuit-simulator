@@ -9,7 +9,7 @@ int main() {
         .methods(crow::HTTPMethod::POST)(
             [](const crow::request &req) { return api::handle_simulate(req); });
 
-    app.port(8080).multithreaded().run();
+    app.port(8081).multithreaded().run();
 
     return 0;
 }
