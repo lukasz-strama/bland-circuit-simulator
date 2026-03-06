@@ -30,13 +30,7 @@ FetchContent_Declare(
     GIT_SHALLOW    TRUE
 )
 
-FetchContent_Declare(
-    nlohmann_json
-    GIT_REPOSITORY https://github.com/nlohmann/json.git
-    GIT_TAG        v3.11.3
-    GIT_SHALLOW    TRUE
-    EXCLUDE_FROM_ALL
-)
+
 
 FetchContent_MakeAvailable(asio)
 set(ASIO_INCLUDE_DIR "${asio_SOURCE_DIR}/asio/include" CACHE PATH "" FORCE)
@@ -44,9 +38,8 @@ set(ASIO_INCLUDE_DIR "${asio_SOURCE_DIR}/asio/include" CACHE PATH "" FORCE)
 set(CROW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(CROW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
-set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
 
-FetchContent_MakeAvailable(Crow nlohmann_json)
+FetchContent_MakeAvailable(Crow)
 
 cmake_policy(SET CMP0169 OLD)
 FetchContent_GetProperties(Eigen3)
@@ -74,5 +67,4 @@ target_link_libraries(${PROJECT_NAME}
     PRIVATE
         Crow::Crow
         Eigen3::Eigen
-        nlohmann_json::nlohmann_json
 )
