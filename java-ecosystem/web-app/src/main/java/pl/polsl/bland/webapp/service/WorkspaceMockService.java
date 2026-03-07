@@ -2,6 +2,7 @@ package pl.polsl.bland.webapp.service;
 
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumMap;
@@ -239,6 +240,16 @@ public class WorkspaceMockService {
         return elements;
     }
 
+    public LinkedHashMap<String, WorkspaceWire> createInitialWires() {
+        LinkedHashMap<String, WorkspaceWire> wires = new LinkedHashMap<>();
+        wires.put("W1", new WorkspaceWire("W1", new PinRef("V1", "POS"), new PinRef("R1", "A")));
+        wires.put("W2", new WorkspaceWire("W2", new PinRef("R1", "B"), new PinRef("L1", "A")));
+        wires.put("W3", new WorkspaceWire("W3", new PinRef("L1", "B"), new PinRef("C1", "A")));
+        wires.put("W4", new WorkspaceWire("W4", new PinRef("C1", "B"), new PinRef("GND", "REF")));
+        wires.put("W5", new WorkspaceWire("W5", new PinRef("V1", "NEG"), new PinRef("GND", "REF")));
+        return wires;
+    }
+
     public WorkspaceElement createElement(Collection<WorkspaceElement> existingElements, ElementType type, double canvasX, double canvasY) {
         int nextSequence = nextSequence(existingElements, type);
         String nextId = buildElementId(type, nextSequence);
@@ -247,10 +258,35 @@ public class WorkspaceMockService {
         return new WorkspaceElement(nextId, type, left, top);
     }
 
+    public Optional<WorkspaceWire> createWire(
+            Map<String, WorkspaceElement> elements,
+            Collection<WorkspaceWire> existingWires,
+            PinRef start,
+            PinRef end) {
+        if (start.equals(end) || resolvePin(elements, start).isEmpty() || resolvePin(elements, end).isEmpty()) {
+            return Optional.empty();
+        }
+
+        boolean duplicate = existingWires.stream().anyMatch(wire -> connectsSamePins(wire, start, end));
+        if (duplicate) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new WorkspaceWire("W" + nextWireSequence(existingWires), start, end));
+    }
+
     public WorkspaceElement moveElement(WorkspaceElement element, double deltaX, double deltaY) {
         double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().width());
         double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().height());
         return new WorkspaceElement(element.id(), element.type(), left, top);
+    }
+
+    public List<ResolvedWire> resolveWires(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
+        List<ResolvedWire> resolved = new ArrayList<>();
+        for (WorkspaceWire wire : wires) {
+            resolveWire(elements, wire).ifPresent(resolved::add);
+        }
+        return resolved;
     }
 
     public Optional<ElementDetails> describeElement(WorkspaceElement element) {
@@ -263,6 +299,10 @@ public class WorkspaceMockService {
 
     public Optional<WorkspaceElement> firstElement(Map<String, WorkspaceElement> elements) {
         return elements.values().stream().findFirst();
+    }
+
+    public boolean isWireAttachedToElement(WorkspaceWire wire, String elementId) {
+        return wire.start().elementId().equals(elementId) || wire.end().elementId().equals(elementId);
     }
 
     private int nextSequence(Collection<WorkspaceElement> elements, ElementType type) {
@@ -285,11 +325,140 @@ public class WorkspaceMockService {
         return max + 1;
     }
 
+    private int nextWireSequence(Collection<WorkspaceWire> wires) {
+        int max = 0;
+        for (WorkspaceWire wire : wires) {
+            String suffix = wire.id().substring(1);
+            try {
+                max = Math.max(max, Integer.parseInt(suffix));
+            } catch (NumberFormatException ignored) {
+                max = Math.max(max, 1);
+            }
+        }
+        return max + 1;
+    }
+
     private String buildElementId(ElementType type, int sequence) {
         if (type == ElementType.GROUND && sequence == 1) {
             return type.prefix();
         }
         return type.prefix() + sequence;
+    }
+
+    private Optional<ResolvedWire> resolveWire(Map<String, WorkspaceElement> elements, WorkspaceWire wire) {
+        Optional<PinPosition> start = resolvePin(elements, wire.start());
+        Optional<PinPosition> end = resolvePin(elements, wire.end());
+        if (start.isEmpty() || end.isEmpty()) {
+            return Optional.empty();
+        }
+
+        List<WirePoint> path = route(start.get(), end.get());
+        List<WireSegment> segments = new ArrayList<>();
+        for (int index = 0; index < path.size() - 1; index++) {
+            WirePoint current = path.get(index);
+            WirePoint next = path.get(index + 1);
+            if (current.equals(next)) {
+                continue;
+            }
+            segments.add(new WireSegment(current.x(), current.y(), next.x(), next.y()));
+        }
+
+        return Optional.of(new ResolvedWire(wire.id(), wire.start(), wire.end(), segments, path));
+    }
+
+    private List<WirePoint> route(PinPosition start, PinPosition end) {
+        List<WirePoint> path = new ArrayList<>();
+        appendPoint(path, new WirePoint(start.x(), start.y()));
+
+        if (sameAxis(start, end)) {
+            appendPoint(path, new WirePoint(end.x(), end.y()));
+            return path;
+        }
+
+        double midX = snap((start.x() + end.x()) / 2.0);
+        if (sameCoordinate(midX, start.x()) || sameCoordinate(midX, end.x())) {
+            midX = snap(start.x() + (end.x() >= start.x() ? GRID_STEP * 2 : -GRID_STEP * 2));
+        }
+
+        appendPoint(path, new WirePoint(midX, start.y()));
+        appendPoint(path, new WirePoint(midX, end.y()));
+        appendPoint(path, new WirePoint(end.x(), end.y()));
+        return path;
+    }
+
+    private Optional<PinPosition> resolvePin(Map<String, WorkspaceElement> elements, PinRef pinRef) {
+        WorkspaceElement element = elements.get(pinRef.elementId());
+        if (element == null) {
+            return Optional.empty();
+        }
+        return resolvePin(element, pinRef.pinKey());
+    }
+
+    private Optional<PinPosition> resolvePin(WorkspaceElement element, String pinKey) {
+        return switch (element.type()) {
+            case RESISTOR -> switch (pinKey) {
+                case "A" -> Optional.of(pin(element, pinKey, 22, 48));
+                case "B" -> Optional.of(pin(element, pinKey, 198, 48));
+                default -> Optional.empty();
+            };
+            case INDUCTOR -> switch (pinKey) {
+                case "A" -> Optional.of(pin(element, pinKey, 22, 48));
+                case "B" -> Optional.of(pin(element, pinKey, 226, 48));
+                default -> Optional.empty();
+            };
+            case CAPACITOR -> switch (pinKey) {
+                case "A" -> Optional.of(pin(element, pinKey, 48, 46));
+                case "B" -> Optional.of(pin(element, pinKey, 48, 190));
+                default -> Optional.empty();
+            };
+            case VOLTAGE -> switch (pinKey) {
+                case "POS" -> Optional.of(pin(element, pinKey, 74, 46));
+                case "NEG" -> Optional.of(pin(element, pinKey, 74, 326));
+                default -> Optional.empty();
+            };
+            case GROUND -> switch (pinKey) {
+                case "REF" -> Optional.of(pin(element, pinKey, 46, 6));
+                default -> Optional.empty();
+            };
+            case DIODE -> switch (pinKey) {
+                case "ANODE" -> Optional.of(pin(element, pinKey, 18, 48));
+                case "CATHODE" -> Optional.of(pin(element, pinKey, 162, 48));
+                default -> Optional.empty();
+            };
+            case OPAMP -> switch (pinKey) {
+                case "IN+" -> Optional.of(pin(element, pinKey, 0, 54));
+                case "IN-" -> Optional.of(pin(element, pinKey, 0, 94));
+                case "OUT" -> Optional.of(pin(element, pinKey, 220, 74));
+                default -> Optional.empty();
+            };
+        };
+    }
+
+    private static PinPosition pin(WorkspaceElement element, String pinKey, double relativeX, double relativeY) {
+        return new PinPosition(
+                element.id(),
+                pinKey,
+                element.left() + relativeX,
+                element.top() + relativeY);
+    }
+
+    private static boolean connectsSamePins(WorkspaceWire wire, PinRef start, PinRef end) {
+        return (wire.start().equals(start) && wire.end().equals(end))
+                || (wire.start().equals(end) && wire.end().equals(start));
+    }
+
+    private static boolean sameAxis(PinPosition start, PinPosition end) {
+        return sameCoordinate(start.x(), end.x()) || sameCoordinate(start.y(), end.y());
+    }
+
+    private static boolean sameCoordinate(double first, double second) {
+        return Math.abs(first - second) < 0.01;
+    }
+
+    private static void appendPoint(List<WirePoint> path, WirePoint point) {
+        if (path.isEmpty() || !path.get(path.size() - 1).equals(point)) {
+            path.add(point);
+        }
     }
 
     private static double snap(double value) {
@@ -339,6 +508,29 @@ public class WorkspaceMockService {
     }
 
     public record WorkspaceElement(String id, ElementType type, double left, double top) {
+    }
+
+    public record PinRef(String elementId, String pinKey) {
+    }
+
+    public record WorkspaceWire(String id, PinRef start, PinRef end) {
+    }
+
+    public record PinPosition(String elementId, String pinKey, double x, double y) {
+    }
+
+    public record WirePoint(double x, double y) {
+    }
+
+    public record WireSegment(double x1, double y1, double x2, double y2) {
+    }
+
+    public record ResolvedWire(
+            String id,
+            PinRef start,
+            PinRef end,
+            List<WireSegment> segments,
+            List<WirePoint> nodes) {
     }
 
     public record ElementDetails(

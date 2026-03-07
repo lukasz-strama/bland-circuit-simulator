@@ -11,6 +11,10 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class SchematicPreview extends Div {
+    private static final String CLICKED_PIN_KEY_DATA =
+            "event.target.closest('[data-pin-key]') ? event.target.closest('[data-pin-key]').dataset.pinKey : ''";
+    private static final String CLICKED_WIRE_DATA =
+            "event.target.closest('[data-wire-id]') ? event.target.closest('[data-wire-id]').dataset.wireId : ''";
     private static final String CLICKED_ELEMENT_DATA =
             "event.target.closest('[data-element-id]') ? event.target.closest('[data-element-id]').dataset.elementId : ''";
     private static final String CANVAS_X_DATA = "event.offsetX";
@@ -18,15 +22,20 @@ public final class SchematicPreview extends Div {
 
     private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
+    private final Map<String, Div> selectablePins = new LinkedHashMap<>();
 
     public SchematicPreview(InteractionHandler interactionHandler) {
         addClassName("sheet-stage");
         add(createSheetNote(), createSheetCanvas(interactionHandler));
     }
 
-    public void renderWorkspace(Collection<WorkspaceMockService.WorkspaceElement> elements) {
+    public void renderWorkspace(
+            Collection<WorkspaceMockService.WorkspaceElement> elements,
+            Collection<WorkspaceMockService.ResolvedWire> wires) {
         selectableParts.clear();
+        selectablePins.clear();
         dynamicLayer.removeAll();
+        wires.forEach(wire -> dynamicLayer.add(createWireAssembly(wire)));
         elements.forEach(element -> dynamicLayer.add(createElementPart(element)));
     }
 
@@ -38,6 +47,17 @@ public final class SchematicPreview extends Div {
         Div selectedPart = selectableParts.get(elementId);
         if (selectedPart != null) {
             selectedPart.addClassName("is-selected");
+        }
+    }
+
+    public void setPendingWireStart(WorkspaceMockService.PinRef pinRef) {
+        selectablePins.values().forEach(pin -> pin.removeClassName("is-pending"));
+        if (pinRef == null) {
+            return;
+        }
+        Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
+        if (pin != null) {
+            pin.addClassName("is-pending");
         }
     }
 
@@ -56,6 +76,8 @@ public final class SchematicPreview extends Div {
                 dynamicLayer);
         canvas.getElement()
                 .addEventListener("click", event -> handleCanvasClick(event, interactionHandler))
+                .addEventData(CLICKED_PIN_KEY_DATA)
+                .addEventData(CLICKED_WIRE_DATA)
                 .addEventData(CLICKED_ELEMENT_DATA)
                 .addEventData(CANVAS_X_DATA)
                 .addEventData(CANVAS_Y_DATA);
@@ -63,6 +85,19 @@ public final class SchematicPreview extends Div {
     }
 
     private void handleCanvasClick(DomEvent event, InteractionHandler interactionHandler) {
+        String pinKey = event.getEventData().getString(CLICKED_PIN_KEY_DATA);
+        String pinElementId = event.getEventData().getString(CLICKED_ELEMENT_DATA);
+        if (pinKey != null && !pinKey.isBlank() && pinElementId != null && !pinElementId.isBlank()) {
+            interactionHandler.onPinClick(pinElementId, pinKey);
+            return;
+        }
+
+        String wireId = event.getEventData().getString(CLICKED_WIRE_DATA);
+        if (wireId != null && !wireId.isBlank()) {
+            interactionHandler.onWireClick(wireId);
+            return;
+        }
+
         String elementId = event.getEventData().getString(CLICKED_ELEMENT_DATA);
         if (elementId != null && !elementId.isBlank()) {
             interactionHandler.onElementClick(elementId);
@@ -103,7 +138,7 @@ public final class SchematicPreview extends Div {
                 text("sheet-text is-note", 84, 68,
                         "Kliknij szybki komponent, aby przejść do trybu wstawiania i dodawać elementy na arkuszu."),
                 text("sheet-text is-note", 84, 86,
-                        "Zaznaczanie, usuwanie i przesuwanie działa już lokalnie bez backendu."));
+                        "Tryb przewodów łączy teraz piny elementów i aktualizuje połączenia po przesunięciu komponentu."));
         return layer;
     }
 
@@ -132,6 +167,8 @@ public final class SchematicPreview extends Div {
                 line("component-line", 138, 28, 158, 68),
                 line("component-line", 158, 68, 178, 28),
                 line("component-line", 178, 28, 198, 48),
+                pin(element.id(), "A", 22, 48),
+                pin(element.id(), "B", 198, 48),
                 text("component-label", 92, 4, element.id()),
                 text("component-value", 68, 82, "120 Ohm"));
         return part;
@@ -147,6 +184,8 @@ public final class SchematicPreview extends Div {
                 loop(104, 29, 38),
                 loop(136, 29, 38),
                 line("component-line", 174, 48, 226, 48),
+                pin(element.id(), "A", 22, 48),
+                pin(element.id(), "B", 226, 48),
                 text("component-label", 110, 4, element.id()),
                 text("component-value", 92, 82, "22 mH"));
         return part;
@@ -160,6 +199,8 @@ public final class SchematicPreview extends Div {
                 line("component-line", 28, 92, 68, 92),
                 line("component-line", 28, 142, 68, 142),
                 line("component-line", 48, 142, 48, 190),
+                pin(element.id(), "A", 48, 46),
+                pin(element.id(), "B", 48, 190),
                 text("component-label", 110, 108, element.id()),
                 text("component-value", 110, 126, "4,7 uF"));
         return part;
@@ -180,6 +221,8 @@ public final class SchematicPreview extends Div {
                 line("component-line", 92, 178, 104, 166),
                 line("component-line", 74, 172, 74, 240),
                 line("component-line", 74, 240, 74, 326),
+                pin(element.id(), "POS", 74, 46),
+                pin(element.id(), "NEG", 74, 326),
                 text("component-label", 42, 4, element.id()),
                 text("component-value", 0, 280, "SIN(0 5 1k)"));
         return part;
@@ -193,6 +236,7 @@ public final class SchematicPreview extends Div {
                 line("component-line", 18, 28, 74, 28),
                 line("component-line", 26, 38, 66, 38),
                 line("component-line", 34, 48, 58, 48),
+                pin(element.id(), "REF", 46, 6),
                 text("component-label", 10, 74, element.id()),
                 text("component-value", 8, 90, "węzeł odniesienia"));
         return part;
@@ -206,6 +250,8 @@ public final class SchematicPreview extends Div {
                 line("component-line", 128, 48, 162, 48),
                 triangle("component-diode-body", 52, 26, 72, 44),
                 line("component-diode-bar", 128, 20, 128, 76),
+                pin(element.id(), "ANODE", 18, 48),
+                pin(element.id(), "CATHODE", 162, 48),
                 text("component-label", 70, 4, element.id()),
                 text("component-value", 56, 82, "1N4148"));
         return part;
@@ -219,11 +265,23 @@ public final class SchematicPreview extends Div {
                 line("component-line", 0, 54, 48, 54),
                 line("component-line", 0, 94, 48, 94),
                 line("component-line", 160, 74, 220, 74),
+                pin(element.id(), "IN+", 0, 54),
+                pin(element.id(), "IN-", 0, 94),
+                pin(element.id(), "OUT", 220, 74),
                 text("component-marker", 18, 44, "+"),
                 text("component-marker", 18, 84, "-"),
                 text("component-label", 70, 0, element.id()),
                 text("component-value", 64, 136, "uA741"));
         return part;
+    }
+
+    private Component createWireAssembly(WorkspaceMockService.ResolvedWire wire) {
+        Div assembly = area("wire-assembly", 0, 0, 1280, 860);
+        assembly.getElement().setAttribute("data-wire-id", wire.id());
+        wire.segments().forEach(segment -> assembly.add(
+                line("wire-segment", segment.x1(), segment.y1(), segment.x2(), segment.y2())));
+        wire.nodes().forEach(node -> assembly.add(junction(node.x(), node.y())));
+        return assembly;
     }
 
     private Div part(WorkspaceMockService.WorkspaceElement element) {
@@ -233,12 +291,19 @@ public final class SchematicPreview extends Div {
         return part;
     }
 
+    private Div pin(String elementId, String pinKey, double centerX, double centerY) {
+        Div pin = area("wire-pin", centerX - 6, centerY - 6, 12, 12);
+        pin.getElement().setAttribute("data-pin-key", pinKey);
+        selectablePins.put(pinToken(elementId, pinKey), pin);
+        return pin;
+    }
+
     private static Div halo(double left, double top, double width, double height) {
         return area("selection-halo", left, top, width, height);
     }
 
-    private static Div dot(double left, double top) {
-        return area("wire-node", left, top, 8, 8);
+    private static Div junction(double centerX, double centerY) {
+        return area("wire-junction", centerX - 4, centerY - 4, 8, 8);
     }
 
     private static Div loop(double left, double top, double size) {
@@ -312,9 +377,17 @@ public final class SchematicPreview extends Div {
         component.addClassNames(className.trim().split("\\s+"));
     }
 
+    private static String pinToken(String elementId, String pinKey) {
+        return elementId + ":" + pinKey;
+    }
+
     public interface InteractionHandler {
         void onCanvasClick(double canvasX, double canvasY);
 
         void onElementClick(String elementId);
+
+        void onPinClick(String elementId, String pinKey);
+
+        void onWireClick(String wireId);
     }
 }

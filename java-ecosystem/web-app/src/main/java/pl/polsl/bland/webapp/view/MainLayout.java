@@ -33,6 +33,7 @@ public class MainLayout extends Div {
     private final ResultsWindow resultsWindow;
     private final SchematicPreview schematicPreview;
     private final LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> workspaceElements = new LinkedHashMap<>();
+    private final LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> workspaceWires = new LinkedHashMap<>();
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createWideReadout("");
     private final Span toolbarToolValue = createReadout("");
@@ -53,6 +54,7 @@ public class MainLayout extends Div {
     private WorkspaceTool activeTool = WorkspaceTool.SELECT;
     private QuickComponent activeComponent = QuickComponent.RESISTOR;
     private String selectedElementId;
+    private WorkspaceMockService.PinRef pendingWireStart;
     private double zoom = DEFAULT_ZOOM;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
@@ -70,6 +72,16 @@ public class MainLayout extends Div {
             @Override
             public void onElementClick(String elementId) {
                 handleElementClick(elementId);
+            }
+
+            @Override
+            public void onPinClick(String elementId, String pinKey) {
+                handlePinClick(elementId, pinKey);
+            }
+
+            @Override
+            public void onWireClick(String wireId) {
+                handleWireClick(wireId);
             }
         });
 
@@ -113,6 +125,9 @@ public class MainLayout extends Div {
     private void resetWorkspace() {
         workspaceElements.clear();
         workspaceElements.putAll(workspaceMockService.createInitialWorkspace());
+        workspaceWires.clear();
+        workspaceWires.putAll(workspaceMockService.createInitialWires());
+        pendingWireStart = null;
         simulationReady = false;
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
@@ -138,7 +153,14 @@ public class MainLayout extends Div {
         }
 
         switch (activeTool) {
-            case WIRE -> statusMessageValue.setText("Rysowanie przewodów zostanie dodane w następnym kroku.");
+            case WIRE -> {
+                if (pendingWireStart != null) {
+                    clearPendingWire();
+                    statusMessageValue.setText("Anulowano rozpoczęte rysowanie przewodu.");
+                } else {
+                    statusMessageValue.setText("Kliknij pierwszy pin, aby rozpocząć przewód.");
+                }
+            }
             case PROBE -> statusMessageValue.setText("Kliknij element, aby aktywować sondę i podejrzeć przebieg.");
             case DELETE -> statusMessageValue.setText("Kliknij element, aby usunąć go z arkusza.");
             default -> statusMessageValue.setText("Kliknięto pusty obszar arkusza.");
@@ -161,6 +183,11 @@ public class MainLayout extends Div {
             resultsWindow.setVisible(true);
             resultsWindow.setActiveTab(ResultsWindow.ResultTab.PLOT);
             statusMessageValue.setText("Sonda ustawiona na śladzie aktywnego elementu " + elementId + ".");
+            return;
+        }
+
+        if (activeTool == WorkspaceTool.WIRE) {
+            statusMessageValue.setText("Wybrano " + elementId + ". Kliknij pin elementu, aby rozpocząć albo zakończyć przewód.");
             return;
         }
 
@@ -190,6 +217,7 @@ public class MainLayout extends Div {
             return;
         }
 
+        int removedWireCount = removeWiresForElement(elementId);
         if (elementId.equals(selectedElementId)) {
             selectedElementId = workspaceMockService.firstElement(workspaceElements)
                     .map(WorkspaceMockService.WorkspaceElement::id)
@@ -198,7 +226,7 @@ public class MainLayout extends Div {
 
         renderWorkspace();
         refreshSelectionPanels();
-        statusMessageValue.setText("Usunięto element " + elementId + " z arkusza.");
+        statusMessageValue.setText("Usunięto element " + elementId + " z arkusza razem z " + removedWireCount + " przewodami.");
     }
 
     private void moveSelectedElement(double deltaX, double deltaY, String directionLabel) {
@@ -226,9 +254,89 @@ public class MainLayout extends Div {
         refreshSelectionPanels();
     }
 
+    private void handlePinClick(String elementId, String pinKey) {
+        if (!workspaceElements.containsKey(elementId)) {
+            return;
+        }
+
+        if (activeTool == WorkspaceTool.DELETE) {
+            deleteElement(elementId);
+            return;
+        }
+
+        showSelection(elementId);
+        WorkspaceMockService.PinRef clickedPin = new WorkspaceMockService.PinRef(elementId, pinKey);
+
+        if (activeTool == WorkspaceTool.PROBE) {
+            resultsWindow.setVisible(true);
+            resultsWindow.setActiveTab(ResultsWindow.ResultTab.PLOT);
+            statusMessageValue.setText("Sonda ustawiona na pinie " + elementId + ":" + pinKey + ".");
+            return;
+        }
+
+        if (activeTool.isPlacementTool()) {
+            statusMessageValue.setText("Wybrano pin " + pinKey + " elementu " + elementId
+                    + ". Kliknij pusty obszar, aby dodać kolejny element typu " + activeComponent.label() + ".");
+            return;
+        }
+
+        if (activeTool != WorkspaceTool.WIRE) {
+            statusMessageValue.setText("Wybrano pin " + pinKey + " elementu " + elementId + ".");
+            return;
+        }
+
+        if (pendingWireStart == null) {
+            pendingWireStart = clickedPin;
+            schematicPreview.setPendingWireStart(pendingWireStart);
+            statusMessageValue.setText("Początek przewodu ustawiono na " + elementId + ":" + pinKey + ". Kliknij drugi pin.");
+            return;
+        }
+
+        if (pendingWireStart.equals(clickedPin)) {
+            clearPendingWire();
+            statusMessageValue.setText("Anulowano rozpoczęty przewód z pinu " + elementId + ":" + pinKey + ".");
+            return;
+        }
+
+        workspaceMockService.createWire(workspaceElements, workspaceWires.values(), pendingWireStart, clickedPin)
+                .ifPresentOrElse(wire -> {
+                    workspaceWires.put(wire.id(), wire);
+                    clearPendingWire();
+                    renderWorkspace();
+                    statusMessageValue.setText(
+                            "Dodano przewód " + wire.id() + " między "
+                                    + wire.start().elementId() + ":" + wire.start().pinKey()
+                                    + " oraz "
+                                    + wire.end().elementId() + ":" + wire.end().pinKey() + ".");
+                }, () -> statusMessageValue.setText("Taki przewód już istnieje albo wskazane piny są nieprawidłowe."));
+    }
+
+    private void handleWireClick(String wireId) {
+        if (!workspaceWires.containsKey(wireId)) {
+            return;
+        }
+
+        if (activeTool == WorkspaceTool.DELETE) {
+            workspaceWires.remove(wireId);
+            renderWorkspace();
+            statusMessageValue.setText("Usunięto przewód " + wireId + ".");
+            return;
+        }
+
+        if (activeTool == WorkspaceTool.WIRE) {
+            statusMessageValue.setText("Kliknij pin elementu, aby rozpocząć lub zakończyć nowy przewód.");
+            return;
+        }
+
+        statusMessageValue.setText("Wybrano przewód " + wireId + ".");
+    }
+
     private void renderWorkspace() {
-        schematicPreview.renderWorkspace(workspaceElements.values());
+        schematicPreview.renderWorkspace(
+                workspaceElements.values(),
+                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()));
         schematicPreview.setSelectedElement(selectedElementId);
+        schematicPreview.setPendingWireStart(pendingWireStart);
     }
 
     private void refreshSelectionPanels() {
@@ -296,6 +404,9 @@ public class MainLayout extends Div {
     }
 
     private void setActiveTool(WorkspaceTool tool, boolean silent) {
+        if (tool != WorkspaceTool.WIRE) {
+            clearPendingWire();
+        }
         activeTool = tool;
         workspacePanel.getElement().setAttribute("data-tool", tool.key());
         toolbarToolValue.setText(tool.label());
@@ -303,7 +414,11 @@ public class MainLayout extends Div {
         railButtons.forEach((key, button) -> setClass(button, "is-active", key == tool));
 
         if (!silent) {
-            statusMessageValue.setText("Aktywne narzędzie: " + tool.label() + ".");
+            if (tool == WorkspaceTool.WIRE) {
+                statusMessageValue.setText("Aktywne narzędzie: " + tool.label() + ". Kliknij pierwszy pin.");
+            } else {
+                statusMessageValue.setText("Aktywne narzędzie: " + tool.label() + ".");
+            }
         }
     }
 
@@ -369,6 +484,28 @@ public class MainLayout extends Div {
             simulationBadgeText.setText("Brak wyników");
             statusSimulationValue.setText("Brak uruchomienia");
         }
+    }
+
+    private int removeWiresForElement(String elementId) {
+        int removed = 0;
+        for (var iterator = workspaceWires.entrySet().iterator(); iterator.hasNext(); ) {
+            Map.Entry<String, WorkspaceMockService.WorkspaceWire> entry = iterator.next();
+            if (!workspaceMockService.isWireAttachedToElement(entry.getValue(), elementId)) {
+                continue;
+            }
+            iterator.remove();
+            removed++;
+        }
+
+        if (pendingWireStart != null && pendingWireStart.elementId().equals(elementId)) {
+            clearPendingWire();
+        }
+        return removed;
+    }
+
+    private void clearPendingWire() {
+        pendingWireStart = null;
+        schematicPreview.setPendingWireStart(null);
     }
 
     private Div buildAppShell() {
