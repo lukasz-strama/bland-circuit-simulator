@@ -38,6 +38,8 @@ public class MainLayout extends Div {
     private final Span activeSymbolReadout = createWideReadout("");
     private final Span toolbarToolValue = createReadout("");
     private final Span selectedNetReadout = createWideReadout("brak");
+    private final Span selectedWireReadout = createWideReadout("brak");
+    private final Span wireEditModeReadout = createReadout("-");
     private final Span zoomReadout = createReadout("");
     private final Span simulationBadgeText = new Span();
     private final Span simulationBadgeDot = new Span();
@@ -57,8 +59,10 @@ public class MainLayout extends Div {
     private WorkspaceTool activeTool = WorkspaceTool.SELECT;
     private QuickComponent activeComponent = QuickComponent.RESISTOR;
     private String selectedElementId;
+    private String selectedWireId;
     private String selectedNetKey;
     private WorkspaceMockService.PinRef pendingWireStart;
+    private WorkspaceMockService.WireEndpoint pendingWireEndpoint;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private double zoom = DEFAULT_ZOOM;
     private boolean simulationReady;
@@ -145,8 +149,10 @@ public class MainLayout extends Div {
         workspaceWires.clear();
         workspaceWires.putAll(workspaceMockService.createInitialWires());
         netAliases.clear();
+        selectedWireId = null;
         selectedNetKey = null;
         pendingWireStart = null;
+        pendingWireEndpoint = null;
         simulationReady = false;
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
@@ -175,6 +181,9 @@ public class MainLayout extends Div {
                 if (pendingWireStart != null) {
                     clearPendingWire();
                     statusMessageValue.setText("Anulowano rozpoczęte rysowanie przewodu.");
+                } else if (pendingWireEndpoint != null) {
+                    clearPendingWireEndpoint();
+                    statusMessageValue.setText("Anulowano przepinanie końcówki przewodu.");
                 } else {
                     statusMessageValue.setText("Kliknij pierwszy pin, aby rozpocząć przewód.");
                 }
@@ -182,6 +191,7 @@ public class MainLayout extends Div {
             case PROBE -> statusMessageValue.setText("Kliknij element, aby aktywować sondę i podejrzeć przebieg.");
             case DELETE -> statusMessageValue.setText("Kliknij element, aby usunąć go z arkusza.");
             default -> {
+                clearSelectedWire();
                 clearSelectedNet();
                 statusMessageValue.setText("Kliknięto pusty obszar arkusza.");
             }
@@ -267,6 +277,7 @@ public class MainLayout extends Div {
 
     private void showSelection(String elementId) {
         selectedElementId = elementId;
+        clearSelectedWire();
         clearSelectedNet();
         propertiesWindow.setVisible(true);
         schematicPreview.setSelectedElement(selectedElementId);
@@ -280,6 +291,11 @@ public class MainLayout extends Div {
 
         if (activeTool == WorkspaceTool.DELETE) {
             deleteElement(elementId);
+            return;
+        }
+
+        if (pendingWireEndpoint != null && selectedWireId != null) {
+            reconnectSelectedWire(new WorkspaceMockService.PinRef(elementId, pinKey));
             return;
         }
 
@@ -342,12 +358,12 @@ public class MainLayout extends Div {
             return;
         }
 
+        showWireSelection(wireId);
         if (activeTool == WorkspaceTool.WIRE) {
-            statusMessageValue.setText("Kliknij pin elementu, aby rozpocząć lub zakończyć nowy przewód.");
-            return;
+            statusMessageValue.setText("Wybrano przewód " + wireId + ". Użyj toolbaru, aby przepiąć jego początek albo koniec.");
+        } else {
+            statusMessageValue.setText("Wybrano przewód " + wireId + ".");
         }
-
-        statusMessageValue.setText("Wybrano przewód " + wireId + ".");
     }
 
     private void handleNetClick(String netKey) {
@@ -355,6 +371,7 @@ public class MainLayout extends Div {
             return;
         }
 
+        clearSelectedWire();
         selectedNetKey = netKey;
         schematicPreview.setSelectedNet(selectedNetKey);
         syncNetControls();
@@ -374,9 +391,14 @@ public class MainLayout extends Div {
         if (selectedNetKey != null && !workspaceNetTopology.hasNet(selectedNetKey)) {
             selectedNetKey = null;
         }
+        if (selectedWireId != null && !workspaceWires.containsKey(selectedWireId)) {
+            selectedWireId = null;
+            pendingWireEndpoint = null;
+        }
         renderWorkspace();
         refreshSelectionPanels();
         syncNetControls();
+        syncWireControls();
     }
 
     private void renderWorkspace() {
@@ -385,11 +407,33 @@ public class MainLayout extends Div {
                 workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()),
                 workspaceNetTopology.nets());
         schematicPreview.setSelectedElement(selectedElementId);
+        schematicPreview.setSelectedWire(selectedWireId);
         schematicPreview.setSelectedNet(selectedNetKey);
         schematicPreview.setPendingWireStart(pendingWireStart);
+        schematicPreview.setFocusedPin(resolveFocusedPin());
     }
 
     private void refreshSelectionPanels() {
+        if (selectedWireId != null) {
+            WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
+            if (wire == null) {
+                selectedWireId = null;
+                refreshSelectionPanels();
+                return;
+            }
+
+            workspaceMockService.describeWire(workspaceElements, workspaceNetTopology, wire).ifPresentOrElse(details -> {
+                propertiesWindow.showWire(details);
+                resultsWindow.showWire(details, analysisLabel);
+                schematicPreview.setSelectedElement(null);
+                schematicPreview.setSelectedWire(selectedWireId);
+            }, () -> {
+                selectedWireId = null;
+                refreshSelectionPanels();
+            });
+            return;
+        }
+
         if (selectedElementId == null) {
             propertiesWindow.clear("Brak zaznaczonego elementu. Dodaj nowy komponent albo wybierz istniejący.");
             resultsWindow.clear(analysisLabel, simulationReady,
@@ -410,6 +454,52 @@ public class MainLayout extends Div {
             resultsWindow.update(details, analysisLabel, simulationReady);
             schematicPreview.setSelectedElement(selectedElementId);
         });
+    }
+
+    private void showWireSelection(String wireId) {
+        selectedWireId = wireId;
+        selectedElementId = null;
+        clearPendingWire();
+        clearPendingWireEndpoint();
+        clearSelectedNet();
+        propertiesWindow.setVisible(true);
+        syncWireControls();
+        refreshSelectionPanels();
+    }
+
+    private void reconnectSelectedWire(WorkspaceMockService.PinRef replacementPin) {
+        WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
+        if (wire == null || pendingWireEndpoint == null) {
+            clearPendingWireEndpoint();
+            statusMessageValue.setText("Najpierw zaznacz przewód i wskaż przepinaną końcówkę.");
+            return;
+        }
+
+        WorkspaceMockService.PinRef currentPin = pendingWireEndpoint == WorkspaceMockService.WireEndpoint.START
+                ? wire.start()
+                : wire.end();
+        if (currentPin.equals(replacementPin)) {
+            clearPendingWireEndpoint();
+            statusMessageValue.setText("Ta końcówka przewodu już jest podłączona do " + replacementPin.elementId()
+                    + ":" + replacementPin.pinKey() + ".");
+            return;
+        }
+
+        workspaceMockService.reconnectWire(
+                        workspaceElements,
+                        workspaceWires.values(),
+                        wire,
+                        pendingWireEndpoint,
+                        replacementPin)
+                .ifPresentOrElse(updatedWire -> {
+                    String endpointLabel = pendingWireEndpoint.label().toLowerCase(Locale.ROOT);
+                    workspaceWires.put(updatedWire.id(), updatedWire);
+                    clearPendingWireEndpoint();
+                    refreshWorkspaceState();
+                    statusMessageValue.setText("Przepięto " + endpointLabel + " przewodu " + updatedWire.id()
+                            + " do " + replacementPin.elementId() + ":" + replacementPin.pinKey() + ".");
+                }, () -> statusMessageValue.setText(
+                        "Nie udało się przepiąć przewodu. Sprawdź, czy wskazany pin istnieje i nie tworzy duplikatu połączenia."));
     }
 
     private void runSimulation() {
@@ -456,6 +546,9 @@ public class MainLayout extends Div {
     private void setActiveTool(WorkspaceTool tool, boolean silent) {
         if (tool != WorkspaceTool.WIRE) {
             clearPendingWire();
+        }
+        if (tool != WorkspaceTool.SELECT && tool != WorkspaceTool.WIRE) {
+            clearPendingWireEndpoint();
         }
         activeTool = tool;
         workspacePanel.getElement().setAttribute("data-tool", tool.key());
@@ -536,6 +629,34 @@ public class MainLayout extends Div {
         }
     }
 
+    private void startWireEndpointEdit(WorkspaceMockService.WireEndpoint endpoint) {
+        if (selectedWireId == null) {
+            statusMessageValue.setText("Najpierw zaznacz przewód na arkuszu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
+        if (wire == null) {
+            selectedWireId = null;
+            syncWireControls();
+            statusMessageValue.setText("Zaznaczony przewód nie istnieje już na arkuszu.");
+            return;
+        }
+
+        if (activeTool != WorkspaceTool.SELECT && activeTool != WorkspaceTool.WIRE) {
+            setActiveTool(WorkspaceTool.SELECT, true);
+        }
+
+        clearPendingWire();
+        pendingWireEndpoint = endpoint;
+        syncWireControls();
+
+        WorkspaceMockService.PinRef currentPin =
+                endpoint == WorkspaceMockService.WireEndpoint.START ? wire.start() : wire.end();
+        statusMessageValue.setText("Przepinanie: " + endpoint.label().toLowerCase(Locale.ROOT) + " przewodu "
+                + wire.id() + ". Kliknij nowy pin zamiast " + currentPin.elementId() + ":" + currentPin.pinKey() + ".");
+    }
+
     private void applySelectedNetName() {
         if (selectedNetKey == null) {
             statusMessageValue.setText("Najpierw zaznacz net na arkuszu.");
@@ -608,6 +729,32 @@ public class MainLayout extends Div {
         });
     }
 
+    private void syncWireControls() {
+        if (selectedWireId == null) {
+            selectedWireReadout.setText("brak");
+            wireEditModeReadout.setText("-");
+            schematicPreview.setSelectedWire(null);
+            schematicPreview.setFocusedPin(null);
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
+        if (wire == null) {
+            selectedWireId = null;
+            pendingWireEndpoint = null;
+            selectedWireReadout.setText("brak");
+            wireEditModeReadout.setText("-");
+            schematicPreview.setSelectedWire(null);
+            schematicPreview.setFocusedPin(null);
+            return;
+        }
+
+        selectedWireReadout.setText(wire.id());
+        wireEditModeReadout.setText(pendingWireEndpoint == null ? "-" : pendingWireEndpoint.label());
+        schematicPreview.setSelectedWire(selectedWireId);
+        schematicPreview.setFocusedPin(resolveFocusedPin());
+    }
+
     private int removeWiresForElement(String elementId) {
         int removed = 0;
         for (var iterator = workspaceWires.entrySet().iterator(); iterator.hasNext(); ) {
@@ -622,6 +769,9 @@ public class MainLayout extends Div {
         if (pendingWireStart != null && pendingWireStart.elementId().equals(elementId)) {
             clearPendingWire();
         }
+        if (selectedWireId != null && !workspaceWires.containsKey(selectedWireId)) {
+            clearSelectedWire();
+        }
         return removed;
     }
 
@@ -633,9 +783,40 @@ public class MainLayout extends Div {
         syncNetControls();
     }
 
+    private void clearSelectedWire() {
+        if (selectedWireId == null && pendingWireEndpoint == null) {
+            return;
+        }
+        selectedWireId = null;
+        clearPendingWireEndpoint();
+        syncWireControls();
+    }
+
     private void clearPendingWire() {
         pendingWireStart = null;
         schematicPreview.setPendingWireStart(null);
+    }
+
+    private void clearPendingWireEndpoint() {
+        pendingWireEndpoint = null;
+        schematicPreview.setFocusedPin(null);
+        if (selectedWireId != null) {
+            syncWireControls();
+        } else {
+            wireEditModeReadout.setText("-");
+        }
+    }
+
+    private WorkspaceMockService.PinRef resolveFocusedPin() {
+        if (selectedWireId == null || pendingWireEndpoint == null) {
+            return null;
+        }
+
+        WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
+        if (wire == null) {
+            return null;
+        }
+        return pendingWireEndpoint == WorkspaceMockService.WireEndpoint.START ? wire.start() : wire.end();
     }
 
     private Div buildAppShell() {
@@ -705,6 +886,22 @@ public class MainLayout extends Div {
         Span resetNetName = createAction("Auto", "mini-button");
         resetNetName.addClickListener(event -> resetSelectedNetName());
 
+        Span rewireStart = createAction("Początek", "mini-button");
+        rewireStart.addClickListener(event -> startWireEndpointEdit(WorkspaceMockService.WireEndpoint.START));
+
+        Span rewireEnd = createAction("Koniec", "mini-button");
+        rewireEnd.addClickListener(event -> startWireEndpointEdit(WorkspaceMockService.WireEndpoint.END));
+
+        Span cancelRewire = createAction("Anuluj", "mini-button");
+        cancelRewire.addClickListener(event -> {
+            if (pendingWireEndpoint == null) {
+                statusMessageValue.setText("Brak aktywnego przepinania końcówki przewodu.");
+                return;
+            }
+            clearPendingWireEndpoint();
+            statusMessageValue.setText("Anulowano przepinanie końcówki przewodu.");
+        });
+
         Span zoomOut = createAction("-", "mini-button");
         zoomOut.addClickListener(event -> setZoom(zoom - ZOOM_STEP, false));
 
@@ -731,7 +928,7 @@ public class MainLayout extends Div {
 
         Span help = createAction("?", "icon-button");
         help.addClickListener(event -> statusMessageValue.setText(
-                "Zaznacz element, aby go przesuwać. Kliknij szybki komponent, aby wstawić nowy na arkusz."));
+                "Zaznacz element, aby go przesuwać. Zaznacz przewód, aby przepiąć jego początek lub koniec."));
 
         toolbar.add(buildToolbarGroup(
                 newProject,
@@ -748,6 +945,15 @@ public class MainLayout extends Div {
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Net"), selectedNetReadout, netNameField, renameNet, resetNetName));
+
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(
+                createLabel("Przewód"),
+                selectedWireReadout,
+                wireEditModeReadout,
+                rewireStart,
+                rewireEnd,
+                cancelRewire));
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Przesuń"), moveLeft, moveUp, moveDown, moveRight));

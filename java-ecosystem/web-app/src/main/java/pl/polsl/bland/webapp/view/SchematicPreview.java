@@ -24,6 +24,7 @@ public final class SchematicPreview extends Div {
 
     private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
+    private final Map<String, Div> selectableWires = new LinkedHashMap<>();
     private final Map<String, Div> selectablePins = new LinkedHashMap<>();
     private final Map<String, Span> selectableNets = new LinkedHashMap<>();
 
@@ -37,6 +38,7 @@ public final class SchematicPreview extends Div {
             Collection<WorkspaceMockService.ResolvedWire> wires,
             Collection<WorkspaceMockService.ResolvedNet> nets) {
         selectableParts.clear();
+        selectableWires.clear();
         selectablePins.clear();
         selectableNets.clear();
         dynamicLayer.removeAll();
@@ -64,6 +66,28 @@ public final class SchematicPreview extends Div {
         Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
         if (pin != null) {
             pin.addClassName("is-pending");
+        }
+    }
+
+    public void setSelectedWire(String wireId) {
+        selectableWires.values().forEach(wire -> wire.removeClassName("is-selected"));
+        if (wireId == null) {
+            return;
+        }
+        Div wire = selectableWires.get(wireId);
+        if (wire != null) {
+            wire.addClassName("is-selected");
+        }
+    }
+
+    public void setFocusedPin(WorkspaceMockService.PinRef pinRef) {
+        selectablePins.values().forEach(pin -> pin.removeClassName("is-focused-endpoint"));
+        if (pinRef == null) {
+            return;
+        }
+        Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
+        if (pin != null) {
+            pin.addClassName("is-focused-endpoint");
         }
     }
 
@@ -302,6 +326,7 @@ public final class SchematicPreview extends Div {
     private Component createWireAssembly(WorkspaceMockService.ResolvedWire wire) {
         Div assembly = area("wire-assembly", 0, 0, 1280, 860);
         assembly.getElement().setAttribute("data-wire-id", wire.id());
+        selectableWires.put(wire.id(), assembly);
         wire.segments().forEach(segment -> assembly.add(
                 line("wire-segment", segment.x1(), segment.y1(), segment.x2(), segment.y2())));
         wire.nodes().forEach(node -> assembly.add(junction(node.x(), node.y())));

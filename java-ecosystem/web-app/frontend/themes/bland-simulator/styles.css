@@ -779,6 +779,11 @@ vaadin-text-field.component-search {
   inset: 0;
 }
 
+.wire-assembly.is-selected .wire-segment {
+  border-top-color: #1f7a8c;
+  box-shadow: 0 0 0 2px rgba(31, 122, 140, 0.14);
+}
+
 .wire-junction,
 .wire-pin {
   border-radius: 999px;
@@ -787,6 +792,11 @@ vaadin-text-field.component-search {
 
 .wire-junction {
   background: #355b86;
+}
+
+.wire-assembly.is-selected .wire-junction {
+  background: #1f7a8c;
+  box-shadow: 0 0 0 3px rgba(31, 122, 140, 0.18);
 }
 
 .wire-pin {
@@ -808,6 +818,13 @@ vaadin-text-field.component-search {
   cursor: crosshair;
 }
 
+.workspace-panel[data-tool="select"] .wire-segment,
+.workspace-panel[data-tool="wire"] .wire-segment,
+.workspace-panel[data-tool="select"] .wire-junction,
+.workspace-panel[data-tool="wire"] .wire-junction {
+  cursor: pointer;
+}
+
 .workspace-panel[data-tool="delete"] .wire-segment,
 .workspace-panel[data-tool="delete"] .wire-junction,
 .workspace-panel[data-tool="delete"] .wire-pin {
@@ -818,6 +835,14 @@ vaadin-text-field.component-search {
   border-color: #2d6aa1;
   background: #dbeaf8;
   box-shadow: 0 0 0 3px rgba(45, 106, 161, 0.18);
+}
+
+.wire-pin.is-focused-endpoint {
+  border-color: #b96a1c;
+  background: #fff3e5;
+  box-shadow: 0 0 0 4px rgba(185, 106, 28, 0.18);
+  opacity: 1;
+  transform: scale(1.06);
 }
 
 .schematic-part {

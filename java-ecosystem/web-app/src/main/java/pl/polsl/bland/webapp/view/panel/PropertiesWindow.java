@@ -71,6 +71,26 @@ public final class PropertiesWindow extends Div {
         simulationData.setVisible(simulationReady);
     }
 
+    public void showWire(WorkspaceMockService.WireDetails details) {
+        caption.setText("Aktywny przewód: " + details.id());
+        propId.setText(details.id());
+        propType.setText("Przewód");
+        propValue.setText(details.startPin() + " -> " + details.endPin());
+        propNodeA.setText(details.startNet());
+        propNodeB.setText(details.endNet());
+        propOrientation.setText(details.geometry());
+        propDescription.setText(details.description());
+        simTrace.setText("-");
+        simPeak.setText("-");
+        simMin.setText("-");
+        simRms.setText("-");
+        simTmax.setText("-");
+        simNote.setText("Przewody nie mają osobnych statystyk symulacji.");
+        simulationEmptyState.setText("Przewód jest elementem połączenia. W tym miejscu możesz śledzić jego topologię.");
+        simulationEmptyState.setVisible(true);
+        simulationData.setVisible(false);
+    }
+
     public void setCloseHandler(Runnable closeHandler) {
         this.closeHandler = closeHandler == null ? () -> {} : closeHandler;
     }

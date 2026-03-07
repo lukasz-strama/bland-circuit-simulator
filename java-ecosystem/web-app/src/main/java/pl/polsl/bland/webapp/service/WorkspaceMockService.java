@@ -278,6 +278,32 @@ public class WorkspaceMockService {
         return Optional.of(new WorkspaceWire("W" + nextWireSequence(existingWires), start, end));
     }
 
+    public Optional<WorkspaceWire> reconnectWire(
+            Map<String, WorkspaceElement> elements,
+            Collection<WorkspaceWire> existingWires,
+            WorkspaceWire wire,
+            WireEndpoint endpoint,
+            PinRef replacementPin) {
+        if (wire == null || endpoint == null) {
+            return Optional.empty();
+        }
+
+        PinRef start = endpoint == WireEndpoint.START ? replacementPin : wire.start();
+        PinRef end = endpoint == WireEndpoint.END ? replacementPin : wire.end();
+        if (start.equals(end) || resolvePin(elements, start).isEmpty() || resolvePin(elements, end).isEmpty()) {
+            return Optional.empty();
+        }
+
+        boolean duplicate = existingWires.stream()
+                .filter(existing -> !existing.id().equals(wire.id()))
+                .anyMatch(existing -> connectsSamePins(existing, start, end));
+        if (duplicate) {
+            return Optional.empty();
+        }
+
+        return Optional.of(new WorkspaceWire(wire.id(), start, end));
+    }
+
     public WorkspaceElement moveElement(WorkspaceElement element, double deltaX, double deltaY) {
         double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().width());
         double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().height());
@@ -362,6 +388,31 @@ public class WorkspaceMockService {
             return Optional.empty();
         }
         return Optional.of(template.describe(element, elements.values(), topology));
+    }
+
+    public Optional<WireDetails> describeWire(
+            Map<String, WorkspaceElement> elements,
+            NetTopology topology,
+            WorkspaceWire wire) {
+        return resolveWire(elements, wire).map(resolvedWire -> {
+            String startPin = formatPin(wire.start());
+            String endPin = formatPin(wire.end());
+            String startNet = topology.netName(wire.start(), "?");
+            String endNet = topology.netName(wire.end(), "?");
+            String geometry = describeWireGeometry(resolvedWire);
+            String description = startNet.equals(endNet)
+                    ? "Przewód utrzymuje ciągłość netu " + startNet + " pomiędzy " + startPin + " i " + endPin + "."
+                    : "Przewód łączy " + startPin + " z " + endPin + " i będzie ponownie przeliczony do wspólnego netu.";
+            String netlist = "* Połączenie " + wire.id()
+                    + System.lineSeparator()
+                    + wire.id() + " " + startPin + " " + endPin + " ; net " + startNet;
+            List<String> logs = List.of(
+                    "Początek przewodu: " + startPin + " (" + startNet + ")",
+                    "Koniec przewodu: " + endPin + " (" + endNet + ")",
+                    "Geometria: " + geometry,
+                    "Segmenty ścieżki: " + resolvedWire.segments().size());
+            return new WireDetails(wire.id(), startPin, endPin, startNet, endNet, geometry, description, netlist, logs);
+        });
     }
 
     public Optional<WorkspaceElement> firstElement(Map<String, WorkspaceElement> elements) {
@@ -486,6 +537,10 @@ public class WorkspaceMockService {
                 .orElse("net-empty");
     }
 
+    private String formatPin(PinRef pinRef) {
+        return pinRef.elementId() + ":" + pinRef.pinKey();
+    }
+
     private String preferredNetName(List<PinRef> component, Map<String, WorkspaceElement> elements) {
         if (containsPin(component, elements, ElementType.GROUND, "REF")) {
             return "0";
@@ -530,6 +585,13 @@ public class WorkspaceMockService {
         appendPoint(path, new WirePoint(midX, end.y()));
         appendPoint(path, new WirePoint(end.x(), end.y()));
         return path;
+    }
+
+    private String describeWireGeometry(ResolvedWire resolvedWire) {
+        if (resolvedWire.segments().size() <= 1) {
+            return "odcinek prosty";
+        }
+        return "łamany / " + resolvedWire.segments().size() + " segmenty";
     }
 
     private Optional<PinPosition> resolvePin(Map<String, WorkspaceElement> elements, PinRef pinRef) {
@@ -771,6 +833,21 @@ public class WorkspaceMockService {
     public record WorkspaceWire(String id, PinRef start, PinRef end) {
     }
 
+    public enum WireEndpoint {
+        START("Początek"),
+        END("Koniec");
+
+        private final String label;
+
+        WireEndpoint(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+    }
+
     public record PinPosition(String elementId, String pinKey, double x, double y) {
     }
 
@@ -838,6 +915,18 @@ public class WorkspaceMockService {
             String timeOfPeak,
             String simulationNote,
             List<ResultRow> rows,
+            String netlist,
+            List<String> logs) {
+    }
+
+    public record WireDetails(
+            String id,
+            String startPin,
+            String endPin,
+            String startNet,
+            String endNet,
+            String geometry,
+            String description,
             String netlist,
             List<String> logs) {
     }

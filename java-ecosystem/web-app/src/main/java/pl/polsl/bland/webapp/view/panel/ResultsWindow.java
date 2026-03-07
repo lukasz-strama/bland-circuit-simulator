@@ -85,6 +85,20 @@ public final class ResultsWindow extends Div {
         resultsGrid.setVisible(simulationReady);
     }
 
+    public void showWire(WorkspaceMockService.WireDetails details, String analysisLabel) {
+        caption.setText("Aktywny przewód: " + details.id());
+        analysisBadge.setText(analysisLabel);
+        plotTitle.setText("Połączenie: " + details.startPin() + " -> " + details.endPin());
+        plotHint.setText("Przewody nie generują osobnego śladu. Użyj widoku netlisty albo logów, aby prześledzić połączenie.");
+        netlistBox.setText(details.netlist());
+        resultsGrid.setItems(List.of());
+        logList.removeAll();
+        details.logs().forEach(line -> logList.add(new Div(new Text(line))));
+        summaryPlaceholder.setText("Przewód nie ma własnych wyników liczbowych. Możesz go przepiąć do innego pinu z poziomu toolbaru.");
+        summaryPlaceholder.setVisible(true);
+        resultsGrid.setVisible(false);
+    }
+
     public void setCloseHandler(Runnable closeHandler) {
         this.closeHandler = closeHandler == null ? () -> {} : closeHandler;
     }
