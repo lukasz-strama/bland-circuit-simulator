@@ -43,7 +43,7 @@ body {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 28px 38px 36px 1fr 24px;
+  grid-template-rows: auto auto auto 1fr 24px;
   background: var(--window-bg);
 }
 
@@ -52,13 +52,16 @@ body {
 .componentbar,
 .statusbar {
   display: flex;
-  align-items: center;
   min-width: 0;
 }
 
 .menubar {
+  align-items: center;
+  flex-wrap: wrap;
+  row-gap: 2px;
   gap: 2px;
-  padding: 0 8px;
+  min-height: 28px;
+  padding: 2px 8px;
   background: linear-gradient(to bottom, #f5f7fa, var(--chrome-bg));
   border-bottom: 1px solid var(--border);
   user-select: none;
@@ -88,23 +91,44 @@ body {
   margin-left: auto;
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 16px;
   color: var(--text-dim);
   font-size: 11px;
 }
 
 .toolbar {
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   padding: 4px 8px;
   background: linear-gradient(to bottom, #edf1f5, var(--toolbar-bg));
   border-bottom: 1px solid var(--border);
   user-select: none;
 }
 
+.toolbar-row,
+.componentbar-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.toolbar-row {
+  gap: 6px;
+}
+
+.componentbar-row {
+  gap: 8px;
+}
+
 .toolbar-group,
 .componentbar-group {
   display: flex;
   align-items: center;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
   gap: 4px;
   min-width: 0;
 }
@@ -179,18 +203,18 @@ body {
 }
 
 .toolbar-readout.is-wide {
-  max-width: 280px;
+  max-width: 180px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 vaadin-select.toolbar-select {
-  width: 190px;
+  width: 176px;
 }
 
 vaadin-text-field.element-value-field,
 vaadin-text-field.net-name-field {
-  width: 170px;
+  width: 150px;
 }
 
 .badge {
@@ -226,7 +250,9 @@ vaadin-text-field.net-name-field {
 }
 
 .componentbar {
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   padding: 4px 8px;
   background: linear-gradient(to bottom, #eaf0f5, #dde5ed);
   border-bottom: 1px solid var(--border);
@@ -234,13 +260,14 @@ vaadin-text-field.net-name-field {
 }
 
 .componentbar-group.is-fill {
-  flex: 1;
-  min-width: 180px;
+  flex: 1 1 320px;
+  min-width: 260px;
 }
 
 vaadin-text-field.component-search {
-  min-width: 260px;
-  max-width: 420px;
+  min-width: 220px;
+  width: min(360px, 100%);
+  max-width: 100%;
 }
 
 .quick-component-glyph {

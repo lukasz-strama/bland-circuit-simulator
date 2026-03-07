@@ -953,6 +953,8 @@ public class MainLayout extends Div {
     private Div buildToolbar() {
         Div toolbar = new Div();
         toolbar.addClassName("toolbar");
+        Div primaryRow = buildToolbarRow();
+        Div secondaryRow = buildToolbarRow();
 
         Span newProject = createAction("Nowy", "tool-button");
         newProject.addClickListener(event -> resetWorkspace());
@@ -1025,32 +1027,31 @@ public class MainLayout extends Div {
         help.addClickListener(event -> statusMessageValue.setText(
                 "Zaznacz element, aby go przesuwać. Zaznacz przewód, aby przepiąć jego początek lub koniec."));
 
-        toolbar.add(buildToolbarGroup(
+        primaryRow.add(buildToolbarGroup(
                 newProject,
                 saveProject,
                 exportProject,
                 simulate,
                 showResults));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(createLabel("Analiza"), analysisSelect));
+        primaryRow.add(separator());
+        primaryRow.add(buildToolbarGroup(createLabel("Analiza"), analysisSelect));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
+        primaryRow.add(separator());
+        primaryRow.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(
+        primaryRow.add(separator());
+        primaryRow.add(buildToolbarGroup(
                 createLabel("Element"),
                 selectedElementReadout,
                 elementValueField,
                 applyElementValue,
                 resetElementValue));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(createLabel("Net"), selectedNetReadout, netNameField, renameNet, resetNetName));
+        secondaryRow.add(buildToolbarGroup(createLabel("Net"), selectedNetReadout, netNameField, renameNet, resetNetName));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(
+        secondaryRow.add(separator());
+        secondaryRow.add(buildToolbarGroup(
                 createLabel("Przewód"),
                 selectedWireReadout,
                 wireEditModeReadout,
@@ -1058,28 +1059,31 @@ public class MainLayout extends Div {
                 rewireEnd,
                 cancelRewire));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(createLabel("Przesuń"), moveLeft, moveUp, moveDown, moveRight));
+        secondaryRow.add(separator());
+        secondaryRow.add(buildToolbarGroup(createLabel("Przesuń"), moveLeft, moveUp, moveDown, moveRight));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(
+        secondaryRow.add(separator());
+        secondaryRow.add(buildToolbarGroup(
                 zoomOut,
                 zoomReadout,
                 zoomIn,
                 fitView,
                 zoom100));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(buildStatusBadge()));
+        secondaryRow.add(separator());
+        secondaryRow.add(buildToolbarGroup(buildStatusBadge()));
 
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(help));
+        secondaryRow.add(separator());
+        secondaryRow.add(buildToolbarGroup(help));
+        toolbar.add(primaryRow, secondaryRow);
         return toolbar;
     }
 
     private Div buildComponentBar() {
         Div componentBar = new Div();
         componentBar.addClassName("componentbar");
+        Div primaryRow = buildComponentRow();
+        Div secondaryRow = buildComponentRow();
 
         Span openLibrary = createAction("Komponent...", "tool-button");
         openLibrary.addClickListener(event -> {
@@ -1087,8 +1091,8 @@ public class MainLayout extends Div {
             statusMessageValue.setText("Filtruj bibliotekę szybką albo kliknij symbol, aby aktywować tryb wstawiania.");
         });
 
-        componentBar.add(buildComponentGroup(openLibrary, createLabel("Biblioteka")));
-        componentBar.add(buildComponentGroup(
+        primaryRow.add(buildComponentGroup(openLibrary, createLabel("Biblioteka")));
+        primaryRow.add(buildComponentGroup(
                 createQuickComponent(QuickComponent.RESISTOR),
                 createQuickComponent(QuickComponent.CAPACITOR),
                 createQuickComponent(QuickComponent.INDUCTOR),
@@ -1102,9 +1106,10 @@ public class MainLayout extends Div {
 
         Div fillGroup = buildComponentGroup(componentSearch, openLibraryDialog);
         fillGroup.addClassName("is-fill");
-        componentBar.add(fillGroup);
+        secondaryRow.add(fillGroup);
 
-        componentBar.add(buildComponentGroup(createLabel("Aktywny symbol"), activeSymbolReadout));
+        secondaryRow.add(buildComponentGroup(createLabel("Aktywny symbol"), activeSymbolReadout));
+        componentBar.add(primaryRow, secondaryRow);
         return componentBar;
     }
 
@@ -1159,11 +1164,25 @@ public class MainLayout extends Div {
         return group;
     }
 
+    private Div buildToolbarRow(Component... children) {
+        Div row = new Div();
+        row.addClassName("toolbar-row");
+        row.add(children);
+        return row;
+    }
+
     private Div buildComponentGroup(Component... children) {
         Div group = new Div();
         group.addClassName("componentbar-group");
         group.add(children);
         return group;
+    }
+
+    private Div buildComponentRow(Component... children) {
+        Div row = new Div();
+        row.addClassName("componentbar-row");
+        row.add(children);
+        return row;
     }
 
     private Div separator() {
