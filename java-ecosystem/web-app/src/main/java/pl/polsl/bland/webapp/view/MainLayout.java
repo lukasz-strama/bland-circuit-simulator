@@ -37,6 +37,7 @@ public class MainLayout extends Div {
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createWideReadout("");
     private final Span toolbarToolValue = createReadout("");
+    private final Span selectedNetReadout = createWideReadout("brak");
     private final Span zoomReadout = createReadout("");
     private final Span simulationBadgeText = new Span();
     private final Span simulationBadgeDot = new Span();
@@ -47,13 +48,16 @@ public class MainLayout extends Div {
     private final Span statusZoomValue = new Span();
     private final Select<String> analysisSelect = new Select<>();
     private final TextField componentSearch = new TextField();
+    private final TextField netNameField = new TextField();
     private final Map<WorkspaceTool, Span> railButtons = new EnumMap<>(WorkspaceTool.class);
     private final Map<QuickComponent, Div> quickComponentButtons = new LinkedHashMap<>();
+    private final LinkedHashMap<String, String> netAliases = new LinkedHashMap<>();
 
     private String analysisLabel = ANALYSIS_TRANSIENT;
     private WorkspaceTool activeTool = WorkspaceTool.SELECT;
     private QuickComponent activeComponent = QuickComponent.RESISTOR;
     private String selectedElementId;
+    private String selectedNetKey;
     private WorkspaceMockService.PinRef pendingWireStart;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private double zoom = DEFAULT_ZOOM;
@@ -81,6 +85,11 @@ public class MainLayout extends Div {
             }
 
             @Override
+            public void onNetClick(String netKey) {
+                handleNetClick(netKey);
+            }
+
+            @Override
             public void onWireClick(String wireId) {
                 handleWireClick(wireId);
             }
@@ -88,6 +97,7 @@ public class MainLayout extends Div {
 
         configureAnalysisSelect();
         configureComponentSearch();
+        configureNetNameField();
         configureFloatingWindows();
 
         addClassName("main-view");
@@ -115,6 +125,12 @@ public class MainLayout extends Div {
         componentSearch.addValueChangeListener(event -> applyComponentFilter(event.getValue()));
     }
 
+    private void configureNetNameField() {
+        netNameField.setPlaceholder("Nazwa netu");
+        netNameField.addClassName("net-name-field");
+        netNameField.setClearButtonVisible(true);
+    }
+
     private void configureFloatingWindows() {
         propertiesWindow.setCloseHandler(() -> {
             propertiesWindow.setVisible(false);
@@ -128,6 +144,8 @@ public class MainLayout extends Div {
         workspaceElements.putAll(workspaceMockService.createInitialWorkspace());
         workspaceWires.clear();
         workspaceWires.putAll(workspaceMockService.createInitialWires());
+        netAliases.clear();
+        selectedNetKey = null;
         pendingWireStart = null;
         simulationReady = false;
         resultsWindow.setVisible(false);
@@ -163,7 +181,10 @@ public class MainLayout extends Div {
             }
             case PROBE -> statusMessageValue.setText("Kliknij element, aby aktywować sondę i podejrzeć przebieg.");
             case DELETE -> statusMessageValue.setText("Kliknij element, aby usunąć go z arkusza.");
-            default -> statusMessageValue.setText("Kliknięto pusty obszar arkusza.");
+            default -> {
+                clearSelectedNet();
+                statusMessageValue.setText("Kliknięto pusty obszar arkusza.");
+            }
         }
     }
 
@@ -246,6 +267,7 @@ public class MainLayout extends Div {
 
     private void showSelection(String elementId) {
         selectedElementId = elementId;
+        clearSelectedNet();
         propertiesWindow.setVisible(true);
         schematicPreview.setSelectedElement(selectedElementId);
         refreshSelectionPanels();
@@ -328,10 +350,33 @@ public class MainLayout extends Div {
         statusMessageValue.setText("Wybrano przewód " + wireId + ".");
     }
 
+    private void handleNetClick(String netKey) {
+        if (!workspaceNetTopology.hasNet(netKey)) {
+            return;
+        }
+
+        selectedNetKey = netKey;
+        schematicPreview.setSelectedNet(selectedNetKey);
+        syncNetControls();
+
+        workspaceNetTopology.findNet(netKey).ifPresent(net -> {
+            if (activeTool == WorkspaceTool.DELETE) {
+                statusMessageValue.setText("Net " + net.name() + " jest pochodny. Usuń przewody, aby go rozdzielić.");
+            } else {
+                statusMessageValue.setText("Zaznaczono net " + net.name() + ".");
+            }
+        });
+    }
+
     private void refreshWorkspaceState() {
-        workspaceNetTopology = workspaceMockService.resolveNetTopology(workspaceElements, workspaceWires.values());
+        workspaceNetTopology = workspaceMockService.resolveNetTopology(workspaceElements, workspaceWires.values(), netAliases);
+        netAliases.keySet().removeIf(key -> !workspaceNetTopology.hasNet(key));
+        if (selectedNetKey != null && !workspaceNetTopology.hasNet(selectedNetKey)) {
+            selectedNetKey = null;
+        }
         renderWorkspace();
         refreshSelectionPanels();
+        syncNetControls();
     }
 
     private void renderWorkspace() {
@@ -340,6 +385,7 @@ public class MainLayout extends Div {
                 workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()),
                 workspaceNetTopology.nets());
         schematicPreview.setSelectedElement(selectedElementId);
+        schematicPreview.setSelectedNet(selectedNetKey);
         schematicPreview.setPendingWireStart(pendingWireStart);
     }
 
@@ -490,6 +536,78 @@ public class MainLayout extends Div {
         }
     }
 
+    private void applySelectedNetName() {
+        if (selectedNetKey == null) {
+            statusMessageValue.setText("Najpierw zaznacz net na arkuszu.");
+            return;
+        }
+
+        String candidate = netNameField.getValue() == null ? "" : netNameField.getValue().trim();
+        if (candidate.isBlank()) {
+            statusMessageValue.setText("Wpisz nazwę netu albo użyj przycisku Auto.");
+            return;
+        }
+
+        if (!candidate.matches("0|[A-Za-z_][A-Za-z0-9_]*")) {
+            statusMessageValue.setText("Nazwa netu może zawierać litery, cyfry i podkreślenia; nie może zaczynać się od cyfry.");
+            return;
+        }
+
+        boolean duplicate = workspaceNetTopology.nets().stream()
+                .anyMatch(net -> !net.key().equals(selectedNetKey) && net.name().equalsIgnoreCase(candidate));
+        if (duplicate) {
+            statusMessageValue.setText("Taka nazwa netu jest już używana.");
+            return;
+        }
+
+        netAliases.put(selectedNetKey, candidate);
+        refreshWorkspaceState();
+        statusMessageValue.setText("Nadano nazwę netu: " + candidate + ".");
+    }
+
+    private void resetSelectedNetName() {
+        if (selectedNetKey == null) {
+            statusMessageValue.setText("Najpierw zaznacz net na arkuszu.");
+            return;
+        }
+
+        if (netAliases.remove(selectedNetKey) == null) {
+            statusMessageValue.setText("Ten net już używa nazwy automatycznej.");
+            return;
+        }
+
+        refreshWorkspaceState();
+        workspaceNetTopology.findNet(selectedNetKey).ifPresentOrElse(
+                net -> statusMessageValue.setText("Przywrócono nazwę automatyczną netu: " + net.name() + "."),
+                () -> statusMessageValue.setText("Przywrócono nazwę automatyczną netu."));
+    }
+
+    private void syncNetControls() {
+        if (selectedNetKey == null) {
+            selectedNetReadout.setText("brak");
+            if (!netNameField.isEmpty()) {
+                netNameField.clear();
+            }
+            schematicPreview.setSelectedNet(null);
+            return;
+        }
+
+        workspaceNetTopology.findNet(selectedNetKey).ifPresentOrElse(net -> {
+            selectedNetReadout.setText(net.name());
+            if (!net.name().equals(netNameField.getValue())) {
+                netNameField.setValue(net.name());
+            }
+            schematicPreview.setSelectedNet(selectedNetKey);
+        }, () -> {
+            selectedNetKey = null;
+            selectedNetReadout.setText("brak");
+            if (!netNameField.isEmpty()) {
+                netNameField.clear();
+            }
+            schematicPreview.setSelectedNet(null);
+        });
+    }
+
     private int removeWiresForElement(String elementId) {
         int removed = 0;
         for (var iterator = workspaceWires.entrySet().iterator(); iterator.hasNext(); ) {
@@ -505,6 +623,14 @@ public class MainLayout extends Div {
             clearPendingWire();
         }
         return removed;
+    }
+
+    private void clearSelectedNet() {
+        if (selectedNetKey == null) {
+            return;
+        }
+        selectedNetKey = null;
+        syncNetControls();
     }
 
     private void clearPendingWire() {
@@ -573,6 +699,12 @@ public class MainLayout extends Div {
         Span showResults = createAction("Pokaż wyniki", "tool-button");
         showResults.addClickListener(event -> toggleResultsWindow(true));
 
+        Span renameNet = createAction("Nazwij", "mini-button");
+        renameNet.addClickListener(event -> applySelectedNetName());
+
+        Span resetNetName = createAction("Auto", "mini-button");
+        resetNetName.addClickListener(event -> resetSelectedNetName());
+
         Span zoomOut = createAction("-", "mini-button");
         zoomOut.addClickListener(event -> setZoom(zoom - ZOOM_STEP, false));
 
@@ -613,6 +745,9 @@ public class MainLayout extends Div {
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
+
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(createLabel("Net"), selectedNetReadout, netNameField, renameNet, resetNetName));
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Przesuń"), moveLeft, moveUp, moveDown, moveRight));

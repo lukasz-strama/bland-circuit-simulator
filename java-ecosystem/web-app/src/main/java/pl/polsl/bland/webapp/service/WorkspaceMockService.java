@@ -292,7 +292,10 @@ public class WorkspaceMockService {
         return resolved;
     }
 
-    public NetTopology resolveNetTopology(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
+    public NetTopology resolveNetTopology(
+            Map<String, WorkspaceElement> elements,
+            Collection<WorkspaceWire> wires,
+            Map<String, String> aliases) {
         LinkedHashMap<PinRef, PinPosition> pins = new LinkedHashMap<>();
         LinkedHashMap<PinRef, List<PinRef>> adjacency = new LinkedHashMap<>();
 
@@ -313,6 +316,8 @@ public class WorkspaceMockService {
         }
 
         LinkedHashMap<PinRef, String> pinNetNames = new LinkedHashMap<>();
+        LinkedHashMap<PinRef, String> pinNetKeys = new LinkedHashMap<>();
+        LinkedHashMap<String, ResolvedNet> netsByKey = new LinkedHashMap<>();
         List<ResolvedNet> nets = new ArrayList<>();
         Set<PinRef> visited = new LinkedHashSet<>();
         Set<String> usedNames = new LinkedHashSet<>();
@@ -324,8 +329,10 @@ public class WorkspaceMockService {
             }
 
             List<PinRef> component = collectConnectedPins(start, adjacency, visited);
+            String netKey = buildNetKey(component);
             String preferredName = preferredNetName(component, elements);
-            String netName = preferredName;
+            String aliasName = aliases.get(netKey);
+            String netName = aliasName == null || aliasName.isBlank() ? preferredName : aliasName.trim();
             if (netName == null || usedNames.contains(netName)) {
                 do {
                     netName = "N%03d".formatted(nextGenericIndex++);
@@ -334,11 +341,16 @@ public class WorkspaceMockService {
 
             usedNames.add(netName);
             String resolvedNetName = netName;
-            component.forEach(pin -> pinNetNames.put(pin, resolvedNetName));
-            nets.add(createResolvedNet(resolvedNetName, component, pins));
+            component.forEach(pin -> {
+                pinNetNames.put(pin, resolvedNetName);
+                pinNetKeys.put(pin, netKey);
+            });
+            ResolvedNet resolvedNet = createResolvedNet(netKey, resolvedNetName, component, pins);
+            nets.add(resolvedNet);
+            netsByKey.put(netKey, resolvedNet);
         }
 
-        return new NetTopology(pinNetNames, nets);
+        return new NetTopology(pinNetNames, pinNetKeys, netsByKey, nets);
     }
 
     public Optional<ElementDetails> describeElement(
@@ -447,7 +459,7 @@ public class WorkspaceMockService {
         return connected;
     }
 
-    private ResolvedNet createResolvedNet(String netName, List<PinRef> component, Map<PinRef, PinPosition> pins) {
+    private ResolvedNet createResolvedNet(String netKey, String netName, List<PinRef> component, Map<PinRef, PinPosition> pins) {
         PinPosition anchor = null;
         for (PinRef pinRef : component) {
             PinPosition candidate = pins.get(pinRef);
@@ -463,7 +475,15 @@ public class WorkspaceMockService {
 
         double labelX = anchor == null ? GRID_LEFT : anchor.x() + 10;
         double labelY = anchor == null ? GRID_TOP : Math.max(GRID_TOP - 8, anchor.y() - 18);
-        return new ResolvedNet(netName, List.copyOf(component), labelX, labelY);
+        return new ResolvedNet(netKey, netName, List.copyOf(component), labelX, labelY);
+    }
+
+    private String buildNetKey(List<PinRef> component) {
+        return component.stream()
+                .map(pin -> pin.elementId() + ":" + pin.pinKey())
+                .sorted()
+                .reduce((left, right) -> left + "|" + right)
+                .orElse("net-empty");
     }
 
     private String preferredNetName(List<PinRef> component, Map<String, WorkspaceElement> elements) {
@@ -769,6 +789,7 @@ public class WorkspaceMockService {
     }
 
     public record ResolvedNet(
+            String key,
             String name,
             List<PinRef> members,
             double labelX,
@@ -777,13 +798,27 @@ public class WorkspaceMockService {
 
     public record NetTopology(
             Map<PinRef, String> pinNetNames,
+            Map<PinRef, String> pinNetKeys,
+            Map<String, ResolvedNet> netsByKey,
             List<ResolvedNet> nets) {
         public static NetTopology empty() {
-            return new NetTopology(Map.of(), List.of());
+            return new NetTopology(Map.of(), Map.of(), Map.of(), List.of());
         }
 
         public String netName(PinRef pinRef, String fallback) {
             return pinNetNames.getOrDefault(pinRef, fallback);
+        }
+
+        public String netKey(PinRef pinRef) {
+            return pinNetKeys.get(pinRef);
+        }
+
+        public Optional<ResolvedNet> findNet(String netKey) {
+            return Optional.ofNullable(netsByKey.get(netKey));
+        }
+
+        public boolean hasNet(String netKey) {
+            return netsByKey.containsKey(netKey);
         }
     }
 

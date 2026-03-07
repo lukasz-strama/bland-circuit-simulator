@@ -694,7 +694,8 @@ vaadin-text-field.component-search {
 .sheet-layer.is-dynamic .schematic-part,
 .sheet-layer.is-dynamic .wire-segment,
 .sheet-layer.is-dynamic .wire-junction,
-.sheet-layer.is-dynamic .wire-pin {
+.sheet-layer.is-dynamic .wire-pin,
+.sheet-layer.is-dynamic .sheet-net-label {
   pointer-events: auto;
 }
 
@@ -737,11 +738,19 @@ vaadin-text-field.component-search {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  pointer-events: none;
+  cursor: pointer;
   background: rgba(245, 248, 252, 0.92);
   padding: 2px 4px;
   border: 1px solid rgba(110, 137, 165, 0.4);
   border-radius: 2px;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.sheet-net-label:hover,
+.sheet-net-label.is-selected {
+  color: #163553;
+  background: rgba(223, 236, 249, 0.96);
+  border-color: rgba(45, 106, 161, 0.65);
 }
 
 .sheet-text.is-note {

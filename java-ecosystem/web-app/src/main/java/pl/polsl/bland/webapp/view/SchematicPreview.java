@@ -13,6 +13,8 @@ import java.util.Map;
 public final class SchematicPreview extends Div {
     private static final String CLICKED_PIN_KEY_DATA =
             "event.target.closest('[data-pin-key]') ? event.target.closest('[data-pin-key]').dataset.pinKey : ''";
+    private static final String CLICKED_NET_KEY_DATA =
+            "event.target.closest('[data-net-key]') ? event.target.closest('[data-net-key]').dataset.netKey : ''";
     private static final String CLICKED_WIRE_DATA =
             "event.target.closest('[data-wire-id]') ? event.target.closest('[data-wire-id]').dataset.wireId : ''";
     private static final String CLICKED_ELEMENT_DATA =
@@ -23,6 +25,7 @@ public final class SchematicPreview extends Div {
     private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
     private final Map<String, Div> selectablePins = new LinkedHashMap<>();
+    private final Map<String, Span> selectableNets = new LinkedHashMap<>();
 
     public SchematicPreview(InteractionHandler interactionHandler) {
         addClassName("sheet-stage");
@@ -35,6 +38,7 @@ public final class SchematicPreview extends Div {
             Collection<WorkspaceMockService.ResolvedNet> nets) {
         selectableParts.clear();
         selectablePins.clear();
+        selectableNets.clear();
         dynamicLayer.removeAll();
         wires.forEach(wire -> dynamicLayer.add(createWireAssembly(wire)));
         nets.forEach(net -> dynamicLayer.add(netLabel(net)));
@@ -63,6 +67,17 @@ public final class SchematicPreview extends Div {
         }
     }
 
+    public void setSelectedNet(String netKey) {
+        selectableNets.values().forEach(net -> net.removeClassName("is-selected"));
+        if (netKey == null) {
+            return;
+        }
+        Span net = selectableNets.get(netKey);
+        if (net != null) {
+            net.addClassName("is-selected");
+        }
+    }
+
     private Component createSheetNote() {
         Div note = new Div();
         note.addClassName("sheet-note");
@@ -79,6 +94,7 @@ public final class SchematicPreview extends Div {
         canvas.getElement()
                 .addEventListener("click", event -> handleCanvasClick(event, interactionHandler))
                 .addEventData(CLICKED_PIN_KEY_DATA)
+                .addEventData(CLICKED_NET_KEY_DATA)
                 .addEventData(CLICKED_WIRE_DATA)
                 .addEventData(CLICKED_ELEMENT_DATA)
                 .addEventData(CANVAS_X_DATA)
@@ -91,6 +107,12 @@ public final class SchematicPreview extends Div {
         String pinElementId = event.getEventData().getString(CLICKED_ELEMENT_DATA);
         if (pinKey != null && !pinKey.isBlank() && pinElementId != null && !pinElementId.isBlank()) {
             interactionHandler.onPinClick(pinElementId, pinKey);
+            return;
+        }
+
+        String netKey = event.getEventData().getString(CLICKED_NET_KEY_DATA);
+        if (netKey != null && !netKey.isBlank()) {
+            interactionHandler.onNetClick(netKey);
             return;
         }
 
@@ -289,6 +311,8 @@ public final class SchematicPreview extends Div {
     private Component netLabel(WorkspaceMockService.ResolvedNet net) {
         Span label = text("sheet-net-label", net.labelX(), net.labelY(), net.name());
         label.getElement().setAttribute("data-net-name", net.name());
+        label.getElement().setAttribute("data-net-key", net.key());
+        selectableNets.put(net.key(), label);
         return label;
     }
 
@@ -395,6 +419,8 @@ public final class SchematicPreview extends Div {
         void onElementClick(String elementId);
 
         void onPinClick(String elementId, String pinKey);
+
+        void onNetClick(String netKey);
 
         void onWireClick(String wireId);
     }
