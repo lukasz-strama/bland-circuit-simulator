@@ -1,3 +1,7 @@
+GUI: ([Figma](https://www.figma.com/design/NHJp5kacai7WlVIpCGsPPR/BlandDesign?node-id=0-1&m=dev&t=h9QZ9eInxaQkzupD-1))
+
+---
+
 **1. Tytuł projektu:** Wieloplatformowy system symulacji obwodów elektrycznych RLC w architekturze rozproszonej.
 
 **2. Cel projektu:**
