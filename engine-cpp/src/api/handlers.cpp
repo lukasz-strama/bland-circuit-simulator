@@ -1,7 +1,7 @@
 #include "api/handlers.hpp"
 
-#include <sstream>
 #include <iomanip>
+#include <sstream>
 
 #include "core/solver.hpp"
 #include "parser/netlist_parser.hpp"
@@ -16,7 +16,7 @@ static std::string result_to_csv(const core::SimulationResult &result) {
     for (const auto &name : result.node_names) {
         csv << ",V(" << name << ")";
     }
-    for (const auto &name : result.source_names) {
+    for (const auto &name : result.current_names) {
         csv << ",I(" << name << ")";
     }
     csv << "\n";
@@ -29,8 +29,8 @@ static std::string result_to_csv(const core::SimulationResult &result) {
                 csv << "," << std::setprecision(6) << v;
             }
         }
-        if (t < result.branch_currents.size()) {
-            for (const auto &i : result.branch_currents[t]) {
+        if (t < result.component_currents.size()) {
+            for (const auto &i : result.component_currents[t]) {
                 csv << "," << std::setprecision(6) << i;
             }
         }
@@ -41,35 +41,44 @@ static std::string result_to_csv(const core::SimulationResult &result) {
 }
 
 struct SimParams {
-    std::string type   = "dc";
-    double      tstop  = 0.01;
-    double      tstep  = 0.0001;
+    std::string type  = "dc";
+    double      tstop = 0.01;
+    double      tstep = 0.0001;
 };
 
 static SimParams extract_sim_params(const std::string &netlist) {
-    SimParams params;
+    SimParams          params;
     std::istringstream stream(netlist);
-    std::string line;
+    std::string        line;
 
     while (std::getline(stream, line)) {
-        if (line.empty()) continue;
+        if (line.empty())
+            continue;
         std::string lower = line;
-        for (auto &c : lower) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+        for (auto &c : lower)
+            c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
 
-        if (lower.rfind(".simulate", 0) != 0) continue;
+        if (lower.rfind(".simulate", 0) != 0)
+            continue;
 
         std::istringstream tokens(line);
-        std::string token;
+        std::string        token;
         while (tokens >> token) {
             auto eq = token.find('=');
-            if (eq == std::string::npos) continue;
+            if (eq == std::string::npos)
+                continue;
             std::string key = token.substr(0, eq);
             std::string val = token.substr(eq + 1);
-            for (auto &c : key) c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+            for (auto &c : key)
+                c = static_cast<char>(
+                    std::tolower(static_cast<unsigned char>(c)));
 
-            if (key == "type")  params.type  = val;
-            if (key == "tstop") params.tstop = std::stod(val);
-            if (key == "tstep") params.tstep = std::stod(val);
+            if (key == "type")
+                params.type = val;
+            if (key == "tstop")
+                params.tstop = std::stod(val);
+            if (key == "tstep")
+                params.tstep = std::stod(val);
         }
     }
 

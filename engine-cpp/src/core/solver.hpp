@@ -14,6 +14,8 @@ struct SimulationResult {
     std::vector<double>              time_points;
     std::vector<std::vector<double>> node_voltages;
     std::vector<std::vector<double>> branch_currents;
+    std::vector<std::string>         current_names;
+    std::vector<std::vector<double>> component_currents;
 };
 
 [[nodiscard]] SimulationResult solve_dc(const Circuit &circuit);
