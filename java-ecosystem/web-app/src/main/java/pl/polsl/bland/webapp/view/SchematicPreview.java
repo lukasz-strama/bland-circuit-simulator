@@ -201,7 +201,7 @@ public final class SchematicPreview extends Div {
 
     private static Div area(String className, double left, double top, double width, double height) {
         Div area = new Div();
-        area.addClassName(className);
+        addClasses(area, className);
         setBox(area, left, top, width, height);
         return area;
     }
@@ -221,7 +221,7 @@ public final class SchematicPreview extends Div {
         double angle = Math.toDegrees(Math.atan2(dy, dx));
 
         Div line = new Div();
-        line.addClassName(className);
+        addClasses(line, className);
         line.getStyle()
                 .set("left", px(x1))
                 .set("top", px(y1))
@@ -232,7 +232,7 @@ public final class SchematicPreview extends Div {
 
     private static Span text(String className, double left, double top, String value) {
         Span text = new Span(value);
-        text.addClassName(className);
+        addClasses(text, className);
         text.getStyle()
                 .set("left", px(left))
                 .set("top", px(top));
@@ -249,5 +249,12 @@ public final class SchematicPreview extends Div {
 
     private static String px(double value) {
         return (Math.rint(value) == value ? Integer.toString((int) value) : Double.toString(value)) + "px";
+    }
+
+    private static void addClasses(Component component, String className) {
+        if (className == null || className.isBlank()) {
+            return;
+        }
+        component.addClassNames(className.trim().split("\\s+"));
     }
 }
