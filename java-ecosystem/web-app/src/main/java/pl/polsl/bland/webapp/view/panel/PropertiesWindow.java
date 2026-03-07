@@ -7,6 +7,7 @@ import pl.polsl.bland.webapp.service.WorkspaceMockService;
 
 public final class PropertiesWindow extends Div {
     private final Span caption = new Span();
+    private final Span closeButton = new Span("x");
     private final Span propId = new Span();
     private final Span propType = new Span();
     private final Span propValue = new Span();
@@ -20,13 +21,17 @@ public final class PropertiesWindow extends Div {
     private final Span simRms = new Span();
     private final Span simTmax = new Span();
     private final Span simNote = new Span();
+    private final Div simulationEmptyState = new Div();
+    private final Div simulationData = new Div();
+    private Runnable closeHandler = () -> {};
 
     public PropertiesWindow() {
         addClassName("floating-window");
+        closeButton.addClickListener(event -> closeHandler.run());
         add(buildTitleBar(), buildBody());
     }
 
-    public void update(WorkspaceMockService.ElementDetails details) {
+    public void update(WorkspaceMockService.ElementDetails details, boolean simulationReady) {
         caption.setText("Aktywny element: " + details.id());
         propId.setText(details.id());
         propType.setText(details.typeLabel());
@@ -41,6 +46,13 @@ public final class PropertiesWindow extends Div {
         simRms.setText(details.rms());
         simTmax.setText(details.timeOfPeak());
         simNote.setText(details.simulationNote());
+        simulationEmptyState.setText("Uruchom symulację, aby wyświetlić statystyki dla " + details.id() + ".");
+        simulationEmptyState.setVisible(!simulationReady);
+        simulationData.setVisible(simulationReady);
+    }
+
+    public void setCloseHandler(Runnable closeHandler) {
+        this.closeHandler = closeHandler == null ? () -> {} : closeHandler;
     }
 
     private Component buildTitleBar() {
@@ -53,9 +65,8 @@ public final class PropertiesWindow extends Div {
         caption.addClassName("window-caption");
         textGroup.add(title, caption);
 
-        Span close = new Span("x");
-        close.addClassName("window-close");
-        titleBar.add(textGroup, close);
+        closeButton.addClassName("window-close");
+        titleBar.add(textGroup, closeButton);
         return titleBar;
     }
 
@@ -76,7 +87,16 @@ public final class PropertiesWindow extends Div {
     private Component buildSimulationBlock() {
         Div block = new Div();
         block.addClassName("panel-block");
-        block.add(sectionTitle("Dane po symulacji"), simulationGrid());
+        simulationEmptyState.addClassNames("hint-box", "simulation-empty-state");
+        simulationData.addClassName("simulation-data");
+        simulationData.add(
+                propertyLabel("Ślad"), simTrace,
+                propertyLabel("Wartość szczytowa"), simPeak,
+                propertyLabel("Wartość minimalna"), simMin,
+                propertyLabel("RMS / średnia"), simRms,
+                propertyLabel("Chwila maksimum"), simTmax,
+                propertyLabel("Notatka"), simNote);
+        block.add(sectionTitle("Dane po symulacji"), simulationEmptyState, simulationData);
         return block;
     }
 
@@ -91,19 +111,6 @@ public final class PropertiesWindow extends Div {
                 propertyLabel("Węzeł B"), propNodeB,
                 propertyLabel("Orientacja"), propOrientation,
                 propertyLabel("Opis"), propDescription);
-        return grid;
-    }
-
-    private Component simulationGrid() {
-        Div grid = new Div();
-        grid.addClassName("simulation-data");
-        grid.add(
-                propertyLabel("Ślad"), simTrace,
-                propertyLabel("Wartość szczytowa"), simPeak,
-                propertyLabel("Wartość minimalna"), simMin,
-                propertyLabel("RMS / średnia"), simRms,
-                propertyLabel("Chwila maksimum"), simTmax,
-                propertyLabel("Notatka"), simNote);
         return grid;
     }
 

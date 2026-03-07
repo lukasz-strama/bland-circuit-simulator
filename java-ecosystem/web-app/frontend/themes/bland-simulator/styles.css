@@ -216,6 +216,10 @@ vaadin-select.toolbar-select {
   background: #7c8798;
 }
 
+.status-dot.is-done {
+  background: #3b7b4f;
+}
+
 .componentbar {
   gap: 8px;
   padding: 4px 8px;
@@ -282,6 +286,22 @@ vaadin-text-field.component-search {
   background:
     linear-gradient(rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0.18)),
     var(--workspace-bg);
+}
+
+.workspace-panel[data-tool="select"] .workspace-viewport {
+  cursor: default;
+}
+
+.workspace-panel[data-tool="wire"] .workspace-viewport {
+  cursor: crosshair;
+}
+
+.workspace-panel[data-tool="probe"] .workspace-viewport {
+  cursor: cell;
+}
+
+.workspace-panel[data-tool="delete"] .workspace-viewport {
+  cursor: not-allowed;
 }
 
 .workspace-viewport {
@@ -374,6 +394,12 @@ vaadin-text-field.component-search {
   font-size: 11px;
 }
 
+.window-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .window-close {
   width: 22px;
   height: 22px;
@@ -460,13 +486,15 @@ vaadin-text-field.component-search {
 }
 
 .tab-panels {
-  display: grid;
-  gap: 10px;
   padding: 10px;
 }
 
-.tab-panel:not(.is-active) {
-  opacity: 0.55;
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.is-active {
+  display: block;
 }
 
 .plot-box,
@@ -485,27 +513,6 @@ vaadin-text-field.component-search {
 
 .table-wrap {
   overflow: auto;
-}
-
-.table-wrap table {
-  width: 100%;
-  border-collapse: collapse;
-  background: rgba(255, 255, 255, 0.62);
-}
-
-.table-wrap th,
-.table-wrap td {
-  padding: 8px 10px;
-  border-bottom: 1px solid #d2dce7;
-  text-align: left;
-}
-
-.table-wrap th {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: var(--text-dim);
-  background: rgba(232, 237, 243, 0.9);
 }
 
 .statusbar {
@@ -778,4 +785,9 @@ vaadin-grid.results-grid {
   --vaadin-grid-cell-padding: 8px 10px;
   border: 1px solid #d2dce7;
   background: rgba(255, 255, 255, 0.62);
+}
+
+.results-placeholder,
+.simulation-empty-state {
+  margin-bottom: 8px;
 }
