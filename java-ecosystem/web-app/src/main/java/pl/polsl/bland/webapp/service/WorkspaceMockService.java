@@ -235,11 +235,11 @@ public class WorkspaceMockService {
 
     public LinkedHashMap<String, WorkspaceElement> createInitialWorkspace() {
         LinkedHashMap<String, WorkspaceElement> elements = new LinkedHashMap<>();
-        elements.put("R1", new WorkspaceElement("R1", ElementType.RESISTOR, 270, 192));
-        elements.put("L1", new WorkspaceElement("L1", ElementType.INDUCTOR, 590, 192));
-        elements.put("C1", new WorkspaceElement("C1", ElementType.CAPACITOR, 892, 194));
-        elements.put("V1", new WorkspaceElement("V1", ElementType.VOLTAGE, 110, 194));
-        elements.put("GND", new WorkspaceElement("GND", ElementType.GROUND, 138, 514));
+        elements.put("R1", createSeedElement("R1", ElementType.RESISTOR, 270, 192));
+        elements.put("L1", createSeedElement("L1", ElementType.INDUCTOR, 590, 192));
+        elements.put("C1", createSeedElement("C1", ElementType.CAPACITOR, 892, 194));
+        elements.put("V1", createSeedElement("V1", ElementType.VOLTAGE, 110, 194));
+        elements.put("GND", createSeedElement("GND", ElementType.GROUND, 138, 514));
         return elements;
     }
 
@@ -258,7 +258,7 @@ public class WorkspaceMockService {
         String nextId = buildElementId(type, nextSequence);
         double left = clamp(snap(canvasX - type.width() / 2), GRID_LEFT, GRID_RIGHT - type.width());
         double top = clamp(snap(canvasY - type.height() / 2), GRID_TOP, GRID_BOTTOM - type.height());
-        return new WorkspaceElement(nextId, type, left, top);
+        return new WorkspaceElement(nextId, type, left, top, defaultValue(type));
     }
 
     public Optional<WorkspaceWire> createWire(
@@ -307,7 +307,16 @@ public class WorkspaceMockService {
     public WorkspaceElement moveElement(WorkspaceElement element, double deltaX, double deltaY) {
         double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().width());
         double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().height());
-        return new WorkspaceElement(element.id(), element.type(), left, top);
+        return new WorkspaceElement(element.id(), element.type(), left, top, element.value());
+    }
+
+    public WorkspaceElement updateElementValue(WorkspaceElement element, String value) {
+        return new WorkspaceElement(element.id(), element.type(), element.left(), element.top(), normalizeValue(element.type(), value));
+    }
+
+    public String defaultValue(ElementType type) {
+        ElementTemplate template = templates.get(type);
+        return template == null ? "" : template.defaultValue();
     }
 
     public List<ResolvedWire> resolveWires(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
@@ -467,6 +476,10 @@ public class WorkspaceMockService {
         return type.prefix() + sequence;
     }
 
+    private WorkspaceElement createSeedElement(String id, ElementType type, double left, double top) {
+        return new WorkspaceElement(id, type, left, top, defaultValue(type));
+    }
+
     private Optional<ResolvedWire> resolveWire(Map<String, WorkspaceElement> elements, WorkspaceWire wire) {
         Optional<PinPosition> start = resolvePin(elements, wire.start());
         Optional<PinPosition> end = resolvePin(elements, wire.end());
@@ -535,6 +548,11 @@ public class WorkspaceMockService {
                 .sorted()
                 .reduce((left, right) -> left + "|" + right)
                 .orElse("net-empty");
+    }
+
+    private String normalizeValue(ElementType type, String value) {
+        String candidate = value == null ? "" : value.trim();
+        return candidate.isBlank() ? defaultValue(type) : candidate;
     }
 
     private String formatPin(PinRef pinRef) {
@@ -718,19 +736,16 @@ public class WorkspaceMockService {
     private static String formatNetlistLine(WorkspaceElement element, NetTopology topology) {
         String nodeA = resolveNodeName(topology, primaryPinA(element), "NC_A");
         String nodeB = resolveNodeName(topology, primaryPinB(element), "NC_B");
+        String value = element.value();
 
         return switch (element.type()) {
-            case RESISTOR -> element.id() + " " + nodeA + " " + nodeB + " 120";
-            case INDUCTOR -> element.id() + " " + nodeA + " " + nodeB + " 22m";
-            case CAPACITOR -> element.id() + " " + nodeA + " " + nodeB + " 4.7u";
-            case VOLTAGE -> element.id() + " " + nodeA + " " + nodeB + " SIN(0 5 1k)";
+            case RESISTOR, INDUCTOR, CAPACITOR, VOLTAGE, DIODE -> element.id() + " " + nodeA + " " + nodeB + " " + value;
             case GROUND -> "* " + element.id() + " -> net 0";
-            case DIODE -> element.id() + " " + nodeA + " " + nodeB + " 1N4148";
             case OPAMP -> "X" + element.id()
                     + " " + topology.netName(new PinRef(element.id(), "IN+"), "INP")
                     + " " + topology.netName(new PinRef(element.id(), "IN-"), "INN")
                     + " " + topology.netName(new PinRef(element.id(), "OUT"), "OUT")
-                    + " uA741";
+                    + " " + value;
         };
     }
 
@@ -824,7 +839,7 @@ public class WorkspaceMockService {
         }
     }
 
-    public record WorkspaceElement(String id, ElementType type, double left, double top) {
+    public record WorkspaceElement(String id, ElementType type, double left, double top, String value) {
     }
 
     public record PinRef(String elementId, String pinKey) {
@@ -958,18 +973,20 @@ public class WorkspaceMockService {
                 NetTopology topology) {
             String resolvedNodeA = resolveNodeName(topology, primaryPinA(element), nodeA);
             String resolvedNodeB = resolveNodeName(topology, primaryPinB(element), nodeB);
+            String resolvedValue = element.value();
             String traceName = buildTraceName(element, topology, resolvedNodeA, resolvedNodeB);
             String netlist = buildWorkspaceNetlist(allElements, topology, element, traceName);
             List<String> logs = logsTemplate.stream()
                     .map(line -> format(line, element.id()))
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            logs.add("Aktualna wartość: " + resolvedValue + ".");
             logs.add("Połączenia aktywne: A=" + resolvedNodeA + ", B=" + resolvedNodeB + ".");
             logs.add("Dostępne nety: " + summarizeNetNames(topology) + ".");
             return new ElementDetails(
                     element.id(),
                     symbol,
                     typeLabel,
-                    defaultValue,
+                    resolvedValue,
                     resolvedNodeA,
                     resolvedNodeB,
                     orientation,

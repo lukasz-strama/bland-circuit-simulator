@@ -188,6 +188,11 @@ vaadin-select.toolbar-select {
   width: 190px;
 }
 
+vaadin-text-field.element-value-field,
+vaadin-text-field.net-name-field {
+  width: 170px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;

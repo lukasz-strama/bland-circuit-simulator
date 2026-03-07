@@ -218,7 +218,7 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "A", 22, 48),
                 pin(element.id(), "B", 198, 48),
                 text("component-label", 92, 4, element.id()),
-                text("component-value", 68, 82, "120 Ohm"));
+                text("component-value", 68, 82, element.value()));
         return part;
     }
 
@@ -235,7 +235,7 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "A", 22, 48),
                 pin(element.id(), "B", 226, 48),
                 text("component-label", 110, 4, element.id()),
-                text("component-value", 92, 82, "22 mH"));
+                text("component-value", 92, 82, element.value()));
         return part;
     }
 
@@ -250,7 +250,7 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "A", 48, 46),
                 pin(element.id(), "B", 48, 190),
                 text("component-label", 110, 108, element.id()),
-                text("component-value", 110, 126, "4,7 uF"));
+                text("component-value", 110, 126, element.value()));
         return part;
     }
 
@@ -272,7 +272,7 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "POS", 74, 46),
                 pin(element.id(), "NEG", 74, 326),
                 text("component-label", 42, 4, element.id()),
-                text("component-value", 0, 280, "SIN(0 5 1k)"));
+                text("component-value", 0, 280, element.value()));
         return part;
     }
 
@@ -286,7 +286,7 @@ public final class SchematicPreview extends Div {
                 line("component-line", 34, 48, 58, 48),
                 pin(element.id(), "REF", 46, 6),
                 text("component-label", 10, 74, element.id()),
-                text("component-value", 8, 90, "węzeł odniesienia"));
+                text("component-value", 8, 90, element.value()));
         return part;
     }
 
@@ -301,7 +301,7 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "ANODE", 18, 48),
                 pin(element.id(), "CATHODE", 162, 48),
                 text("component-label", 70, 4, element.id()),
-                text("component-value", 56, 82, "1N4148"));
+                text("component-value", 56, 82, element.value()));
         return part;
     }
 
@@ -319,7 +319,7 @@ public final class SchematicPreview extends Div {
                 text("component-marker", 18, 44, "+"),
                 text("component-marker", 18, 84, "-"),
                 text("component-label", 70, 0, element.id()),
-                text("component-value", 64, 136, "uA741"));
+                text("component-value", 64, 136, element.value()));
         return part;
     }
 

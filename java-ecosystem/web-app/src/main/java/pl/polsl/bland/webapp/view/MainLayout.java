@@ -37,6 +37,7 @@ public class MainLayout extends Div {
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createWideReadout("");
     private final Span toolbarToolValue = createReadout("");
+    private final Span selectedElementReadout = createWideReadout("brak");
     private final Span selectedNetReadout = createWideReadout("brak");
     private final Span selectedWireReadout = createWideReadout("brak");
     private final Span wireEditModeReadout = createReadout("-");
@@ -50,6 +51,7 @@ public class MainLayout extends Div {
     private final Span statusZoomValue = new Span();
     private final Select<String> analysisSelect = new Select<>();
     private final TextField componentSearch = new TextField();
+    private final TextField elementValueField = new TextField();
     private final TextField netNameField = new TextField();
     private final Map<WorkspaceTool, Span> railButtons = new EnumMap<>(WorkspaceTool.class);
     private final Map<QuickComponent, Div> quickComponentButtons = new LinkedHashMap<>();
@@ -101,6 +103,7 @@ public class MainLayout extends Div {
 
         configureAnalysisSelect();
         configureComponentSearch();
+        configureElementValueField();
         configureNetNameField();
         configureFloatingWindows();
 
@@ -127,6 +130,12 @@ public class MainLayout extends Div {
         componentSearch.setClearButtonVisible(true);
         componentSearch.setValueChangeMode(ValueChangeMode.EAGER);
         componentSearch.addValueChangeListener(event -> applyComponentFilter(event.getValue()));
+    }
+
+    private void configureElementValueField() {
+        elementValueField.setPlaceholder("Wartość elementu");
+        elementValueField.addClassName("element-value-field");
+        elementValueField.setClearButtonVisible(true);
     }
 
     private void configureNetNameField() {
@@ -282,6 +291,7 @@ public class MainLayout extends Div {
         propertiesWindow.setVisible(true);
         schematicPreview.setSelectedElement(selectedElementId);
         refreshSelectionPanels();
+        syncElementControls();
     }
 
     private void handlePinClick(String elementId, String pinKey) {
@@ -397,6 +407,7 @@ public class MainLayout extends Div {
         }
         renderWorkspace();
         refreshSelectionPanels();
+        syncElementControls();
         syncNetControls();
         syncWireControls();
     }
@@ -465,6 +476,7 @@ public class MainLayout extends Div {
         propertiesWindow.setVisible(true);
         syncWireControls();
         refreshSelectionPanels();
+        syncElementControls();
     }
 
     private void reconnectSelectedWire(WorkspaceMockService.PinRef replacementPin) {
@@ -629,6 +641,57 @@ public class MainLayout extends Div {
         }
     }
 
+    private void applySelectedElementValue() {
+        if (selectedElementId == null || selectedWireId != null) {
+            statusMessageValue.setText("Najpierw zaznacz element na arkuszu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        String candidate = elementValueField.getValue() == null ? "" : elementValueField.getValue().trim();
+        if (candidate.isBlank()) {
+            statusMessageValue.setText("Wpisz nową wartość elementu albo użyj przycisku Domyślna.");
+            return;
+        }
+
+        if (candidate.length() > 48) {
+            statusMessageValue.setText("Wartość elementu jest zbyt długa. Skróć opis parametru.");
+            return;
+        }
+
+        workspaceElements.put(selectedElementId, workspaceMockService.updateElementValue(element, candidate));
+        refreshWorkspaceState();
+        statusMessageValue.setText("Zmieniono wartość " + selectedElementId + " na: " + candidate + ".");
+    }
+
+    private void resetSelectedElementValue() {
+        if (selectedElementId == null || selectedWireId != null) {
+            statusMessageValue.setText("Najpierw zaznacz element na arkuszu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        String defaultValue = workspaceMockService.defaultValue(element.type());
+        if (defaultValue.equals(element.value())) {
+            statusMessageValue.setText("Ten element już używa wartości domyślnej.");
+            return;
+        }
+
+        workspaceElements.put(selectedElementId, workspaceMockService.updateElementValue(element, defaultValue));
+        refreshWorkspaceState();
+        statusMessageValue.setText("Przywrócono domyślną wartość dla " + selectedElementId + ": " + defaultValue + ".");
+    }
+
     private void startWireEndpointEdit(WorkspaceMockService.WireEndpoint endpoint) {
         if (selectedWireId == null) {
             statusMessageValue.setText("Najpierw zaznacz przewód na arkuszu.");
@@ -729,6 +792,31 @@ public class MainLayout extends Div {
         });
     }
 
+    private void syncElementControls() {
+        if (selectedElementId == null || selectedWireId != null) {
+            selectedElementReadout.setText("brak");
+            if (!elementValueField.isEmpty()) {
+                elementValueField.clear();
+            }
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            selectedElementId = null;
+            selectedElementReadout.setText("brak");
+            if (!elementValueField.isEmpty()) {
+                elementValueField.clear();
+            }
+            return;
+        }
+
+        selectedElementReadout.setText(element.id());
+        if (!element.value().equals(elementValueField.getValue())) {
+            elementValueField.setValue(element.value());
+        }
+    }
+
     private void syncWireControls() {
         if (selectedWireId == null) {
             selectedWireReadout.setText("brak");
@@ -790,6 +878,7 @@ public class MainLayout extends Div {
         selectedWireId = null;
         clearPendingWireEndpoint();
         syncWireControls();
+        syncElementControls();
     }
 
     private void clearPendingWire() {
@@ -886,6 +975,12 @@ public class MainLayout extends Div {
         Span resetNetName = createAction("Auto", "mini-button");
         resetNetName.addClickListener(event -> resetSelectedNetName());
 
+        Span applyElementValue = createAction("Zastosuj", "mini-button");
+        applyElementValue.addClickListener(event -> applySelectedElementValue());
+
+        Span resetElementValue = createAction("Domyślna", "mini-button");
+        resetElementValue.addClickListener(event -> resetSelectedElementValue());
+
         Span rewireStart = createAction("Początek", "mini-button");
         rewireStart.addClickListener(event -> startWireEndpointEdit(WorkspaceMockService.WireEndpoint.START));
 
@@ -942,6 +1037,14 @@ public class MainLayout extends Div {
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
+
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(
+                createLabel("Element"),
+                selectedElementReadout,
+                elementValueField,
+                applyElementValue,
+                resetElementValue));
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Net"), selectedNetReadout, netNameField, renameNet, resetNetName));
