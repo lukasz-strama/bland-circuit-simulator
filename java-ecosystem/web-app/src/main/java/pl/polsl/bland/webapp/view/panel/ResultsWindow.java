@@ -2,6 +2,8 @@ package pl.polsl.bland.webapp.view.panel;
 
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
+import com.vaadin.flow.component.grid.Grid;
+import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
@@ -11,13 +13,14 @@ public final class ResultsWindow extends Div {
     private final Span caption = new Span();
     private final Span analysisBadge = new Span();
     private final Span plotTitle = new Span();
-    private final Div summaryTable = new Div();
+    private final Grid<WorkspaceMockService.ResultRow> resultsGrid = new Grid<>(WorkspaceMockService.ResultRow.class, false);
     private final Div plotHint = new Div();
     private final Pre netlistBox = new Pre();
     private final Div logList = new Div();
 
     public ResultsWindow() {
         addClassNames("floating-window", "is-results-window");
+        configureResultsGrid();
         add(buildTitleBar(), buildBody());
     }
 
@@ -27,9 +30,9 @@ public final class ResultsWindow extends Div {
         plotTitle.setText("Aktywny ślad: " + details.traceName());
         plotHint.setText(details.simulationNote());
         netlistBox.setText(details.netlist());
+        resultsGrid.setItems(details.rows());
         logList.removeAll();
         details.logs().forEach(line -> logList.add(new Div(new Text(line))));
-        summaryTable.getElement().setProperty("innerHTML", renderTable(details.rows()));
     }
 
     private Component buildTitleBar() {
@@ -77,8 +80,9 @@ public final class ResultsWindow extends Div {
     }
 
     private Component buildSummaryPanel() {
-        summaryTable.addClassName("table-wrap");
-        return summaryTable;
+        Div wrap = new Div(resultsGrid);
+        wrap.addClassName("table-wrap");
+        return wrap;
     }
 
     private Component buildPlotPanel() {
@@ -120,31 +124,14 @@ public final class ResultsWindow extends Div {
         return panel;
     }
 
-    private String renderTable(java.util.List<WorkspaceMockService.ResultRow> rows) {
-        StringBuilder html = new StringBuilder();
-        html.append("""
-                <table aria-label="Tabela wyników">
-                  <thead>
-                    <tr>
-                      <th>Czas</th>
-                      <th>Napięcie</th>
-                      <th>Prąd</th>
-                      <th>Uwagi</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                """);
-
-        for (WorkspaceMockService.ResultRow row : rows) {
-            html.append("<tr>")
-                    .append("<td>").append(row.time()).append("</td>")
-                    .append("<td>").append(row.voltage()).append("</td>")
-                    .append("<td>").append(row.current()).append("</td>")
-                    .append("<td>").append(row.note()).append("</td>")
-                    .append("</tr>");
-        }
-
-        html.append("</tbody></table>");
-        return html.toString();
+    private void configureResultsGrid() {
+        resultsGrid.addClassName("results-grid");
+        resultsGrid.addThemeVariants(GridVariant.LUMO_COMPACT, GridVariant.LUMO_ROW_STRIPES);
+        resultsGrid.setSelectionMode(Grid.SelectionMode.NONE);
+        resultsGrid.setAllRowsVisible(true);
+        resultsGrid.addColumn(WorkspaceMockService.ResultRow::time).setHeader("Czas").setAutoWidth(true).setFlexGrow(0);
+        resultsGrid.addColumn(WorkspaceMockService.ResultRow::voltage).setHeader("Napięcie").setAutoWidth(true).setFlexGrow(0);
+        resultsGrid.addColumn(WorkspaceMockService.ResultRow::current).setHeader("Prąd").setAutoWidth(true).setFlexGrow(0);
+        resultsGrid.addColumn(WorkspaceMockService.ResultRow::note).setHeader("Uwagi").setFlexGrow(1);
     }
 }

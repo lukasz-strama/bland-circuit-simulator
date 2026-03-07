@@ -1,7 +1,6 @@
 package pl.polsl.bland.webapp.view;
 
 import com.vaadin.flow.component.Component;
-import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
@@ -15,13 +14,10 @@ import pl.polsl.bland.webapp.view.panel.ResultsWindow;
 @Route("")
 @PageTitle("Bland Circuit Simulator")
 public class MainLayout extends Div {
-    private static final String CLICKED_ELEMENT_EVENT_DATA =
-            "event.target.closest('[data-element]') ? event.target.closest('[data-element]').dataset.element : ''";
-
     private final WorkspaceMockService workspaceMockService;
     private final PropertiesWindow propertiesWindow;
     private final ResultsWindow resultsWindow;
-    private final Div sheetStage;
+    private final SchematicPreview schematicPreview;
     private final Span activeSymbolReadout;
     private final Span simulationBadgeText;
     private final Span statusSimulationValue;
@@ -31,7 +27,7 @@ public class MainLayout extends Div {
         this.workspaceMockService = workspaceMockService;
         this.propertiesWindow = new PropertiesWindow();
         this.resultsWindow = new ResultsWindow();
-        this.sheetStage = new Div();
+        this.schematicPreview = new SchematicPreview(this::selectElement);
         this.activeSymbolReadout = createWideReadout("R / Rezystor");
         this.simulationBadgeText = new Span("Brak wyników");
         this.statusSimulationValue = new Span("Brak uruchomienia");
@@ -40,22 +36,8 @@ public class MainLayout extends Div {
         addClassName("main-view");
         setSizeFull();
 
-        configureSheetStage();
         add(buildAppShell());
         selectElement(workspaceMockService.defaultElement().id());
-    }
-
-    private void configureSheetStage() {
-        sheetStage.addClassName("sheet-stage");
-        sheetStage.getElement().setProperty("innerHTML", SchematicPreviewFactory.render());
-        sheetStage.getElement()
-                .addEventListener("click", event -> {
-                    String elementId = event.getEventData().getString(CLICKED_ELEMENT_EVENT_DATA);
-                    if (elementId != null && !elementId.isBlank()) {
-                        selectElement(elementId);
-                    }
-                })
-                .addEventData(CLICKED_ELEMENT_EVENT_DATA);
     }
 
     private void selectElement(String elementId) {
@@ -66,18 +48,8 @@ public class MainLayout extends Div {
             simulationBadgeText.setText("Mock: " + details.traceName());
             statusSimulationValue.setText("Podgląd " + details.traceName());
             statusMessageValue.setText("Zaznaczono " + details.id() + ". Kliknij inny element na arkuszu.");
-            highlightSelectedElement(elementId);
+            schematicPreview.setSelectedElement(elementId);
         });
-    }
-
-    private void highlightSelectedElement(String elementId) {
-        sheetStage.getElement().executeJs("""
-                this.querySelectorAll('.schematic-part').forEach(part => part.classList.remove('is-selected'));
-                const selected = this.querySelector('.schematic-part[data-element="' + $0 + '"]');
-                if (selected) {
-                    selected.classList.add('is-selected');
-                }
-                """, elementId);
     }
 
     private Div buildAppShell() {
@@ -216,7 +188,7 @@ public class MainLayout extends Div {
 
         Div workspaceViewport = new Div();
         workspaceViewport.addClassName("workspace-viewport");
-        workspaceViewport.add(sheetStage);
+        workspaceViewport.add(schematicPreview);
 
         workspacePanel.add(workspaceViewport, propertiesWindow, resultsWindow);
         return workspacePanel;

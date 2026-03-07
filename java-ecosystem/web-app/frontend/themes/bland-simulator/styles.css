@@ -610,3 +610,172 @@ vaadin-text-field.component-search {
 .node-dot {
   fill: #355b86;
 }
+
+.sheet-canvas {
+  position: relative;
+  overflow: hidden;
+  border: 1.2px solid #b8c4d1;
+  border-radius: 1px;
+  background: var(--sheet-bg);
+}
+
+.sheet-grid {
+  position: absolute;
+  background:
+    linear-gradient(to right, #d8e1ea 1px, transparent 1px),
+    linear-gradient(to bottom, #d8e1ea 1px, transparent 1px),
+    linear-gradient(to right, #e7edf3 1px, transparent 1px),
+    linear-gradient(to bottom, #e7edf3 1px, transparent 1px);
+  background-size: 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+  background-color: #f9fbfd;
+  border: 1.1px solid #c7d0db;
+  box-sizing: border-box;
+}
+
+.sheet-layer,
+.sheet-title-block,
+.schematic-part,
+.selection-halo,
+.component-circle,
+.component-loop,
+.wire-node,
+.sheet-text,
+.sheet-node-label,
+.component-label,
+.component-value,
+.wire-segment,
+.component-line,
+.title-divider {
+  position: absolute;
+  box-sizing: border-box;
+}
+
+.sheet-layer {
+  inset: 0;
+}
+
+.sheet-title-block {
+  border: 1px solid #bfc9d5;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.title-divider {
+  height: 0;
+  border-top: 1px solid #bfc9d5;
+  transform-origin: 0 0;
+}
+
+.title-divider.is-vertical {
+  width: 0;
+  height: auto;
+  border-top: 0;
+  border-left: 1px solid #bfc9d5;
+}
+
+.sheet-text,
+.sheet-node-label,
+.component-label,
+.component-value {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.sheet-text,
+.sheet-node-label {
+  color: #5b6777;
+  font-size: 16px;
+}
+
+.sheet-text.is-note {
+  color: #617286;
+  font-size: 11px;
+}
+
+.sheet-node-label {
+  font-size: 11px;
+}
+
+.wire-segment,
+.component-line {
+  height: 0;
+  border-top: 3.2px solid #355b86;
+  transform-origin: 0 0;
+  border-radius: 999px;
+}
+
+.wire-node {
+  border-radius: 999px;
+  background: #355b86;
+}
+
+.schematic-part {
+  --component-stroke: #355b86;
+  cursor: pointer;
+}
+
+.selection-halo {
+  border: 1.5px dashed rgba(53, 91, 134, 0.42);
+  background: rgba(53, 91, 134, 0.07);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.schematic-part.is-selected .selection-halo,
+.schematic-part:hover .selection-halo {
+  opacity: 1;
+}
+
+.component-line {
+  border-top-color: var(--component-stroke);
+}
+
+.component-circle,
+.component-loop {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.component-circle {
+  border: 3.2px solid var(--component-stroke);
+}
+
+.component-loop {
+  border-style: solid;
+  border-width: 3.2px;
+  border-top-color: var(--component-stroke);
+  border-right-color: var(--component-stroke);
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  transform: rotate(45deg);
+}
+
+.component-label {
+  color: #20344d;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.component-value {
+  color: #4a5a6c;
+  font-size: 18px;
+}
+
+.schematic-part.is-selected {
+  --component-stroke: #2d6aa1;
+}
+
+.schematic-part.is-selected .component-label,
+.schematic-part.is-selected .component-value {
+  color: #2d6aa1;
+}
+
+vaadin-grid.results-grid {
+  --vaadin-grid-background-color: rgba(255, 255, 255, 0.62);
+  --vaadin-grid-header-background-color: rgba(232, 237, 243, 0.9);
+  --vaadin-grid-border-color: #d2dce7;
+  --vaadin-grid-cell-padding: 8px 10px;
+  border: 1px solid #d2dce7;
+  background: rgba(255, 255, 255, 0.62);
+}
