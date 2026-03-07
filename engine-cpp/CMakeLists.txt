@@ -56,6 +56,7 @@ add_executable(${PROJECT_NAME}
     src/api/handlers.cpp
     src/parser/netlist_parser.cpp
     src/core/solver.cpp
+    src/utils/logger.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

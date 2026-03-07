@@ -5,6 +5,8 @@
 #include <stdexcept>
 #include <unordered_map>
 
+#include "utils/logger.hpp"
+
 namespace parser {
 namespace {
 
@@ -58,7 +60,10 @@ core::Circuit parse_netlist(const std::string &raw) {
     core::Circuit circuit;
     circuit.name = "parsed_circuit";
 
+    LOG_INFO("Parsing netlist (" + std::to_string(raw.size()) + " bytes)");
+
     if (raw.empty()) {
+        LOG_WARN("Empty netlist received");
         return circuit;
     }
 
@@ -115,9 +120,13 @@ core::Circuit parse_netlist(const std::string &raw) {
         } else {
             throw std::runtime_error("Unknown component type: " + tokens[0]);
         }
+
+        LOG_DEBUG("Parsed component: " + name);
     }
 
     circuit.node_count = circuit.node_names.size();
+    LOG_INFO("Parsed " + std::to_string(circuit.components.size()) +
+             " components, " + std::to_string(circuit.node_count) + " nodes");
     return circuit;
 }
 
