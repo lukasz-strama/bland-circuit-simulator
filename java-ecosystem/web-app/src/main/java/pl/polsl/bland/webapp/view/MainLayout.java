@@ -13,7 +13,9 @@ import pl.polsl.bland.webapp.view.panel.PropertiesWindow;
 import pl.polsl.bland.webapp.view.panel.ResultsWindow;
 
 import java.util.EnumMap;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -36,6 +38,8 @@ public class MainLayout extends Div {
     private final LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> workspaceWires = new LinkedHashMap<>();
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createWideReadout("");
+    private final Span undoButton = createAction("Cofnij", "tool-button");
+    private final Span redoButton = createAction("Ponów", "tool-button");
     private final Span toolbarToolValue = createReadout("");
     private final Span selectedElementReadout = createWideReadout("brak");
     private final Span selectedNetReadout = createWideReadout("brak");
@@ -56,6 +60,7 @@ public class MainLayout extends Div {
     private final Map<WorkspaceTool, Span> railButtons = new EnumMap<>(WorkspaceTool.class);
     private final Map<QuickComponent, Div> quickComponentButtons = new LinkedHashMap<>();
     private final LinkedHashMap<String, String> netAliases = new LinkedHashMap<>();
+    private final List<WorkspaceSnapshot> workspaceHistory = new ArrayList<>();
 
     private String analysisLabel = ANALYSIS_TRANSIENT;
     private WorkspaceTool activeTool = WorkspaceTool.SELECT;
@@ -66,6 +71,7 @@ public class MainLayout extends Div {
     private WorkspaceMockService.PinRef pendingWireStart;
     private WorkspaceMockService.WireEndpoint pendingWireEndpoint;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
+    private int historyIndex = -1;
     private double zoom = DEFAULT_ZOOM;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
@@ -105,6 +111,7 @@ public class MainLayout extends Div {
         configureComponentSearch();
         configureElementValueField();
         configureNetNameField();
+        configureHistoryButtons();
         configureFloatingWindows();
 
         addClassName("main-view");
@@ -144,6 +151,12 @@ public class MainLayout extends Div {
         netNameField.setClearButtonVisible(true);
     }
 
+    private void configureHistoryButtons() {
+        undoButton.addClickListener(event -> undoWorkspaceChange());
+        redoButton.addClickListener(event -> redoWorkspaceChange());
+        updateHistoryControls();
+    }
+
     private void configureFloatingWindows() {
         propertiesWindow.setCloseHandler(() -> {
             propertiesWindow.setVisible(false);
@@ -175,6 +188,7 @@ public class MainLayout extends Div {
                 .map(WorkspaceMockService.WorkspaceElement::id)
                 .orElse(null);
         refreshWorkspaceState();
+        initializeWorkspaceHistory();
         updateSimulationIndicators();
         statusMessageValue.setText("Nowy projekt mockowany został przygotowany.");
     }
@@ -247,6 +261,7 @@ public class MainLayout extends Div {
         selectedElementId = element.id();
         propertiesWindow.setVisible(true);
         refreshWorkspaceState();
+        recordWorkspaceChange();
         statusMessageValue.setText("Dodano element " + element.id() + ". Kliknij arkusz, aby wstawić kolejny " + type.label() + ".");
     }
 
@@ -264,6 +279,7 @@ public class MainLayout extends Div {
         }
 
         refreshWorkspaceState();
+        recordWorkspaceChange();
         statusMessageValue.setText("Usunięto element " + elementId + " z arkusza razem z " + removedWireCount + " przewodami.");
     }
 
@@ -281,6 +297,7 @@ public class MainLayout extends Div {
 
         workspaceElements.put(selectedElementId, workspaceMockService.moveElement(element, deltaX, deltaY));
         refreshWorkspaceState();
+        recordWorkspaceChange();
         statusMessageValue.setText("Przesunięto " + selectedElementId + " " + directionLabel + ".");
     }
 
@@ -348,6 +365,7 @@ public class MainLayout extends Div {
                     workspaceWires.put(wire.id(), wire);
                     clearPendingWire();
                     refreshWorkspaceState();
+                    recordWorkspaceChange();
                     statusMessageValue.setText(
                             "Dodano przewód " + wire.id() + " między "
                                     + wire.start().elementId() + ":" + wire.start().pinKey()
@@ -364,6 +382,7 @@ public class MainLayout extends Div {
         if (activeTool == WorkspaceTool.DELETE) {
             workspaceWires.remove(wireId);
             refreshWorkspaceState();
+            recordWorkspaceChange();
             statusMessageValue.setText("Usunięto przewód " + wireId + ".");
             return;
         }
@@ -410,6 +429,91 @@ public class MainLayout extends Div {
         syncElementControls();
         syncNetControls();
         syncWireControls();
+    }
+
+    private void initializeWorkspaceHistory() {
+        workspaceHistory.clear();
+        workspaceHistory.add(captureWorkspaceSnapshot());
+        historyIndex = 0;
+        updateHistoryControls();
+    }
+
+    private void recordWorkspaceChange() {
+        WorkspaceSnapshot snapshot = captureWorkspaceSnapshot();
+        if (historyIndex >= 0 && historyIndex < workspaceHistory.size() && workspaceHistory.get(historyIndex).equals(snapshot)) {
+            updateHistoryControls();
+            return;
+        }
+
+        while (workspaceHistory.size() > historyIndex + 1) {
+            workspaceHistory.remove(workspaceHistory.size() - 1);
+        }
+        workspaceHistory.add(snapshot);
+        historyIndex = workspaceHistory.size() - 1;
+        updateHistoryControls();
+    }
+
+    private WorkspaceSnapshot captureWorkspaceSnapshot() {
+        return new WorkspaceSnapshot(
+                new LinkedHashMap<>(workspaceElements),
+                new LinkedHashMap<>(workspaceWires),
+                new LinkedHashMap<>(netAliases),
+                selectedElementId,
+                selectedWireId,
+                selectedNetKey,
+                simulationReady,
+                resultsWindow.isVisible(),
+                propertiesWindow.isVisible());
+    }
+
+    private void undoWorkspaceChange() {
+        if (historyIndex <= 0) {
+            statusMessageValue.setText("Brak wcześniejszych zmian do cofnięcia.");
+            updateHistoryControls();
+            return;
+        }
+
+        historyIndex--;
+        restoreWorkspaceSnapshot(workspaceHistory.get(historyIndex));
+        updateHistoryControls();
+        statusMessageValue.setText("Cofnięto ostatnią zmianę w edytorze.");
+    }
+
+    private void redoWorkspaceChange() {
+        if (historyIndex >= workspaceHistory.size() - 1) {
+            statusMessageValue.setText("Brak kolejnych zmian do ponowienia.");
+            updateHistoryControls();
+            return;
+        }
+
+        historyIndex++;
+        restoreWorkspaceSnapshot(workspaceHistory.get(historyIndex));
+        updateHistoryControls();
+        statusMessageValue.setText("Ponowiono ostatnio cofniętą zmianę.");
+    }
+
+    private void restoreWorkspaceSnapshot(WorkspaceSnapshot snapshot) {
+        workspaceElements.clear();
+        workspaceElements.putAll(snapshot.elements());
+        workspaceWires.clear();
+        workspaceWires.putAll(snapshot.wires());
+        netAliases.clear();
+        netAliases.putAll(snapshot.netAliases());
+        selectedElementId = snapshot.selectedElementId();
+        selectedWireId = snapshot.selectedWireId();
+        selectedNetKey = snapshot.selectedNetKey();
+        pendingWireStart = null;
+        pendingWireEndpoint = null;
+        simulationReady = snapshot.simulationReady();
+        propertiesWindow.setVisible(snapshot.propertiesVisible());
+        resultsWindow.setVisible(snapshot.resultsVisible());
+        refreshWorkspaceState();
+        updateSimulationIndicators();
+    }
+
+    private void updateHistoryControls() {
+        setClass(undoButton, "is-disabled", historyIndex <= 0);
+        setClass(redoButton, "is-disabled", historyIndex < 0 || historyIndex >= workspaceHistory.size() - 1);
     }
 
     private void renderWorkspace() {
@@ -508,6 +612,7 @@ public class MainLayout extends Div {
                     workspaceWires.put(updatedWire.id(), updatedWire);
                     clearPendingWireEndpoint();
                     refreshWorkspaceState();
+                    recordWorkspaceChange();
                     statusMessageValue.setText("Przepięto " + endpointLabel + " przewodu " + updatedWire.id()
                             + " do " + replacementPin.elementId() + ":" + replacementPin.pinKey() + ".");
                 }, () -> statusMessageValue.setText(
@@ -666,6 +771,7 @@ public class MainLayout extends Div {
 
         workspaceElements.put(selectedElementId, workspaceMockService.updateElementValue(element, candidate));
         refreshWorkspaceState();
+        recordWorkspaceChange();
         statusMessageValue.setText("Zmieniono wartość " + selectedElementId + " na: " + candidate + ".");
     }
 
@@ -689,6 +795,7 @@ public class MainLayout extends Div {
 
         workspaceElements.put(selectedElementId, workspaceMockService.updateElementValue(element, defaultValue));
         refreshWorkspaceState();
+        recordWorkspaceChange();
         statusMessageValue.setText("Przywrócono domyślną wartość dla " + selectedElementId + ": " + defaultValue + ".");
     }
 
@@ -746,6 +853,7 @@ public class MainLayout extends Div {
 
         netAliases.put(selectedNetKey, candidate);
         refreshWorkspaceState();
+        recordWorkspaceChange();
         statusMessageValue.setText("Nadano nazwę netu: " + candidate + ".");
     }
 
@@ -761,6 +869,7 @@ public class MainLayout extends Div {
         }
 
         refreshWorkspaceState();
+        recordWorkspaceChange();
         workspaceNetTopology.findNet(selectedNetKey).ifPresentOrElse(
                 net -> statusMessageValue.setText("Przywrócono nazwę automatyczną netu: " + net.name() + "."),
                 () -> statusMessageValue.setText("Przywrócono nazwę automatyczną netu."));
@@ -1029,6 +1138,8 @@ public class MainLayout extends Div {
 
         primaryRow.add(buildToolbarGroup(
                 newProject,
+                undoButton,
+                redoButton,
                 saveProject,
                 exportProject,
                 simulate,
@@ -1280,6 +1391,18 @@ public class MainLayout extends Div {
 
     private static String formatScale(double scale) {
         return String.format(Locale.US, "%.3f", scale);
+    }
+
+    private record WorkspaceSnapshot(
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
+            LinkedHashMap<String, String> netAliases,
+            String selectedElementId,
+            String selectedWireId,
+            String selectedNetKey,
+            boolean simulationReady,
+            boolean resultsVisible,
+            boolean propertiesVisible) {
     }
 
     private enum WorkspaceTool {

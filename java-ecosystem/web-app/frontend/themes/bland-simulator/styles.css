@@ -170,6 +170,13 @@ body {
   background: linear-gradient(to bottom, #ffffff, #e6edf5);
 }
 
+.tool-button.is-disabled,
+.mini-button.is-disabled,
+.icon-button.is-disabled {
+  opacity: 0.48;
+  pointer-events: none;
+}
+
 .tool-button.is-primary {
   background: linear-gradient(to bottom, #f7fafc, #dae5f2);
   border-color: #8ea3bd;
