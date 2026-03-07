@@ -3,21 +3,38 @@ package pl.polsl.bland.webapp.view;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.dom.DomEvent;
+import pl.polsl.bland.webapp.service.WorkspaceMockService;
 
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.function.Consumer;
 
 public final class SchematicPreview extends Div {
+    private static final String CLICKED_ELEMENT_DATA =
+            "event.target.closest('[data-element-id]') ? event.target.closest('[data-element-id]').dataset.elementId : ''";
+    private static final String CANVAS_X_DATA = "event.offsetX";
+    private static final String CANVAS_Y_DATA = "event.offsetY";
+
+    private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
 
-    public SchematicPreview(Consumer<String> selectionHandler) {
+    public SchematicPreview(InteractionHandler interactionHandler) {
         addClassName("sheet-stage");
-        add(createSheetNote(), createSheetCanvas(selectionHandler));
+        add(createSheetNote(), createSheetCanvas(interactionHandler));
+    }
+
+    public void renderWorkspace(Collection<WorkspaceMockService.WorkspaceElement> elements) {
+        selectableParts.clear();
+        dynamicLayer.removeAll();
+        elements.forEach(element -> dynamicLayer.add(createElementPart(element)));
     }
 
     public void setSelectedElement(String elementId) {
         selectableParts.values().forEach(part -> part.removeClassName("is-selected"));
+        if (elementId == null) {
+            return;
+        }
         Div selectedPart = selectableParts.get(elementId);
         if (selectedPart != null) {
             selectedPart.addClassName("is-selected");
@@ -31,20 +48,38 @@ public final class SchematicPreview extends Div {
         return note;
     }
 
-    private Component createSheetCanvas(Consumer<String> selectionHandler) {
+    private Component createSheetCanvas(InteractionHandler interactionHandler) {
         Div canvas = new Div();
         canvas.addClassNames("sheet", "sheet-canvas");
         canvas.add(
+                createStaticLayer(),
+                dynamicLayer);
+        canvas.getElement()
+                .addEventListener("click", event -> handleCanvasClick(event, interactionHandler))
+                .addEventData(CLICKED_ELEMENT_DATA)
+                .addEventData(CANVAS_X_DATA)
+                .addEventData(CANVAS_Y_DATA);
+        return canvas;
+    }
+
+    private void handleCanvasClick(DomEvent event, InteractionHandler interactionHandler) {
+        String elementId = event.getEventData().getString(CLICKED_ELEMENT_DATA);
+        if (elementId != null && !elementId.isBlank()) {
+            interactionHandler.onElementClick(elementId);
+            return;
+        }
+        double canvasX = event.getEventData().getNumber(CANVAS_X_DATA);
+        double canvasY = event.getEventData().getNumber(CANVAS_Y_DATA);
+        interactionHandler.onCanvasClick(canvasX, canvasY);
+    }
+
+    private Component createStaticLayer() {
+        Div layer = area("sheet-layer sheet-static", 0, 0, 1280, 860);
+        layer.add(
                 area("sheet-grid", 36, 36, 1208, 770),
                 createTitleBlock(),
-                createGlobalWireLayer(),
-                createSheetDescriptions(),
-                createResistor(selectionHandler),
-                createInductor(selectionHandler),
-                createCapacitor(selectionHandler),
-                createVoltageSource(selectionHandler),
-                createGround(selectionHandler));
-        return canvas;
+                createSheetDescriptions());
+        return layer;
     }
 
     private Component createTitleBlock() {
@@ -57,46 +92,35 @@ public final class SchematicPreview extends Div {
                 text("sheet-text", 14, 8, "Projekt: Filtr RLC - ćwiczenie 04"),
                 text("sheet-text", 14, 36, "Autor: Laboratorium EE / grupa A2"),
                 text("sheet-text", 280, 36, "Arkusz: 1 / 1"),
-                text("sheet-text", 14, 64, "Tryb: schemat ideowy"),
+                text("sheet-text", 14, 64, "Tryb: makieta edytowalna"),
                 text("sheet-text", 338, 64, "Skala: 1:1"));
         return block;
-    }
-
-    private Component createGlobalWireLayer() {
-        Div layer = area("sheet-layer", 0, 0, 1280, 860);
-        layer.add(
-                line("wire-segment", 184, 240, 292, 240),
-                line("wire-segment", 468, 240, 612, 240),
-                line("wire-segment", 816, 240, 940, 240),
-                line("wire-segment", 940, 384, 940, 520),
-                line("wire-segment", 940, 520, 184, 520),
-                line("wire-segment", 184, 434, 184, 520),
-                dot(180, 236),
-                dot(464, 236),
-                dot(608, 236),
-                dot(812, 236),
-                dot(936, 236),
-                dot(180, 516),
-                dot(936, 516),
-                text("sheet-node-label", 168, 204, "IN"),
-                text("sheet-node-label", 448, 204, "N001"),
-                text("sheet-node-label", 594, 204, "N002"),
-                text("sheet-node-label", 919, 204, "N003"));
-        return layer;
     }
 
     private Component createSheetDescriptions() {
         Div layer = area("sheet-layer", 0, 0, 1280, 860);
         layer.add(
                 text("sheet-text is-note", 84, 68,
-                        "Edytor obwodu: tor RLC w konfiguracji szeregowej z kondensatorem do masy."),
+                        "Kliknij szybki komponent, aby przejść do trybu wstawiania i dodawać elementy na arkuszu."),
                 text("sheet-text is-note", 84, 86,
-                        "Zaznaczenie: kliknij element. Wyniki po symulacji zależne od wybranego śladu."));
+                        "Zaznaczanie, usuwanie i przesuwanie działa już lokalnie bez backendu."));
         return layer;
     }
 
-    private Component createResistor(Consumer<String> selectionHandler) {
-        Div part = part("R1", 270, 192, 220, 110, selectionHandler);
+    private Component createElementPart(WorkspaceMockService.WorkspaceElement element) {
+        return switch (element.type()) {
+            case RESISTOR -> createResistor(element);
+            case INDUCTOR -> createInductor(element);
+            case CAPACITOR -> createCapacitor(element);
+            case VOLTAGE -> createVoltageSource(element);
+            case GROUND -> createGround(element);
+            case DIODE -> createDiode(element);
+            case OPAMP -> createOpAmp(element);
+        };
+    }
+
+    private Component createResistor(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
         part.add(
                 halo(0, 0, 220, 94),
                 line("component-line", 22, 48, 38, 48),
@@ -108,13 +132,13 @@ public final class SchematicPreview extends Div {
                 line("component-line", 138, 28, 158, 68),
                 line("component-line", 158, 68, 178, 28),
                 line("component-line", 178, 28, 198, 48),
-                text("component-label", 92, 4, "R1"),
+                text("component-label", 92, 4, element.id()),
                 text("component-value", 68, 82, "120 Ohm"));
         return part;
     }
 
-    private Component createInductor(Consumer<String> selectionHandler) {
-        Div part = part("L1", 590, 192, 248, 110, selectionHandler);
+    private Component createInductor(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
         part.add(
                 halo(0, 0, 248, 94),
                 line("component-line", 22, 48, 40, 48),
@@ -123,26 +147,26 @@ public final class SchematicPreview extends Div {
                 loop(104, 29, 38),
                 loop(136, 29, 38),
                 line("component-line", 174, 48, 226, 48),
-                text("component-label", 110, 4, "L1"),
+                text("component-label", 110, 4, element.id()),
                 text("component-value", 92, 82, "22 mH"));
         return part;
     }
 
-    private Component createCapacitor(Consumer<String> selectionHandler) {
-        Div part = part("C1", 892, 194, 176, 234, selectionHandler);
+    private Component createCapacitor(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
         part.add(
                 halo(0, 0, 96, 234),
                 line("component-line", 48, 46, 48, 92),
                 line("component-line", 28, 92, 68, 92),
                 line("component-line", 28, 142, 68, 142),
                 line("component-line", 48, 142, 48, 190),
-                text("component-label", 110, 108, "C1"),
+                text("component-label", 110, 108, element.id()),
                 text("component-value", 110, 126, "4,7 uF"));
         return part;
     }
 
-    private Component createVoltageSource(Consumer<String> selectionHandler) {
-        Div part = part("V1", 110, 194, 172, 334, selectionHandler);
+    private Component createVoltageSource(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
         part.add(
                 halo(22, 0, 104, 272),
                 line("component-line", 74, 46, 74, 92),
@@ -156,30 +180,56 @@ public final class SchematicPreview extends Div {
                 line("component-line", 92, 178, 104, 166),
                 line("component-line", 74, 172, 74, 240),
                 line("component-line", 74, 240, 74, 326),
-                text("component-label", 42, 4, "V1"),
+                text("component-label", 42, 4, element.id()),
                 text("component-value", 0, 280, "SIN(0 5 1k)"));
         return part;
     }
 
-    private Component createGround(Consumer<String> selectionHandler) {
-        Div part = part("GND", 138, 514, 136, 104, selectionHandler);
+    private Component createGround(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
         part.add(
                 halo(0, 0, 96, 80),
                 line("component-line", 46, 6, 46, 28),
                 line("component-line", 18, 28, 74, 28),
                 line("component-line", 26, 38, 66, 38),
                 line("component-line", 34, 48, 58, 48),
-                text("component-label", 10, 74, "GND"),
+                text("component-label", 10, 74, element.id()),
                 text("component-value", 8, 90, "węzeł odniesienia"));
         return part;
     }
 
-    private Div part(String elementId, double left, double top, double width, double height,
-                     Consumer<String> selectionHandler) {
-        Div part = area("schematic-part", left, top, width, height);
-        part.getElement().setAttribute("data-element", elementId);
-        part.addClickListener(event -> selectionHandler.accept(elementId));
-        selectableParts.put(elementId, part);
+    private Component createDiode(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
+        part.add(
+                halo(0, 0, 180, 94),
+                line("component-line", 18, 48, 52, 48),
+                line("component-line", 128, 48, 162, 48),
+                triangle("component-diode-body", 52, 26, 72, 44),
+                line("component-diode-bar", 128, 20, 128, 76),
+                text("component-label", 70, 4, element.id()),
+                text("component-value", 56, 82, "1N4148"));
+        return part;
+    }
+
+    private Component createOpAmp(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
+        part.add(
+                halo(0, 0, 220, 148),
+                triangle("component-opamp-body", 48, 18, 112, 112),
+                line("component-line", 0, 54, 48, 54),
+                line("component-line", 0, 94, 48, 94),
+                line("component-line", 160, 74, 220, 74),
+                text("component-marker", 18, 44, "+"),
+                text("component-marker", 18, 84, "-"),
+                text("component-label", 70, 0, element.id()),
+                text("component-value", 64, 136, "uA741"));
+        return part;
+    }
+
+    private Div part(WorkspaceMockService.WorkspaceElement element) {
+        Div part = area("schematic-part", element.left(), element.top(), element.type().width(), element.type().height());
+        part.getElement().setAttribute("data-element-id", element.id());
+        selectableParts.put(element.id(), part);
         return part;
     }
 
@@ -197,6 +247,10 @@ public final class SchematicPreview extends Div {
 
     private static Div circle(String className, double left, double top, double size) {
         return area(className, left, top, size, size);
+    }
+
+    private static Div triangle(String className, double left, double top, double width, double height) {
+        return area(className, left, top, width, height);
     }
 
     private static Div area(String className, double left, double top, double width, double height) {
@@ -256,5 +310,11 @@ public final class SchematicPreview extends Div {
             return;
         }
         component.addClassNames(className.trim().split("\\s+"));
+    }
+
+    public interface InteractionHandler {
+        void onCanvasClick(double canvasX, double canvasY);
+
+        void onElementClick(String elementId);
     }
 }

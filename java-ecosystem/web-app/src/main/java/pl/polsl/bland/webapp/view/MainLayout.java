@@ -26,11 +26,13 @@ public class MainLayout extends Div {
     private static final double MIN_ZOOM = 0.50;
     private static final double MAX_ZOOM = 1.60;
     private static final double ZOOM_STEP = 0.08;
+    private static final double MOVE_STEP = 16;
 
     private final WorkspaceMockService workspaceMockService;
     private final PropertiesWindow propertiesWindow;
     private final ResultsWindow resultsWindow;
     private final SchematicPreview schematicPreview;
+    private final LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> workspaceElements = new LinkedHashMap<>();
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createWideReadout("");
     private final Span toolbarToolValue = createReadout("");
@@ -59,7 +61,17 @@ public class MainLayout extends Div {
         this.workspaceMockService = workspaceMockService;
         this.propertiesWindow = new PropertiesWindow();
         this.resultsWindow = new ResultsWindow();
-        this.schematicPreview = new SchematicPreview(this::selectElement);
+        this.schematicPreview = new SchematicPreview(new SchematicPreview.InteractionHandler() {
+            @Override
+            public void onCanvasClick(double canvasX, double canvasY) {
+                handleCanvasClick(canvasX / zoom, canvasY / zoom);
+            }
+
+            @Override
+            public void onElementClick(String elementId) {
+                handleElementClick(elementId);
+            }
+        });
 
         configureAnalysisSelect();
         configureComponentSearch();
@@ -99,6 +111,8 @@ public class MainLayout extends Div {
     }
 
     private void resetWorkspace() {
+        workspaceElements.clear();
+        workspaceElements.putAll(workspaceMockService.createInitialWorkspace());
         simulationReady = false;
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
@@ -108,40 +122,132 @@ public class MainLayout extends Div {
         setActiveComponent(QuickComponent.RESISTOR, true);
         applyComponentFilter("");
         setZoom(DEFAULT_ZOOM, true);
-        selectedElementId = workspaceMockService.defaultElement().id();
+        selectedElementId = workspaceMockService.firstElement(workspaceElements)
+                .map(WorkspaceMockService.WorkspaceElement::id)
+                .orElse(null);
+        renderWorkspace();
         refreshSelectionPanels();
         updateSimulationIndicators();
         statusMessageValue.setText("Nowy projekt mockowany został przygotowany.");
     }
 
-    private void selectElement(String elementId) {
+    private void handleCanvasClick(double canvasX, double canvasY) {
+        if (activeTool.isPlacementTool()) {
+            addElementAt(activeTool.elementType(), canvasX, canvasY);
+            return;
+        }
+
+        switch (activeTool) {
+            case WIRE -> statusMessageValue.setText("Rysowanie przewodów zostanie dodane w następnym kroku.");
+            case PROBE -> statusMessageValue.setText("Kliknij element, aby aktywować sondę i podejrzeć przebieg.");
+            case DELETE -> statusMessageValue.setText("Kliknij element, aby usunąć go z arkusza.");
+            default -> statusMessageValue.setText("Kliknięto pusty obszar arkusza.");
+        }
+    }
+
+    private void handleElementClick(String elementId) {
+        if (!workspaceElements.containsKey(elementId)) {
+            return;
+        }
+
+        if (activeTool == WorkspaceTool.DELETE) {
+            deleteElement(elementId);
+            return;
+        }
+
+        showSelection(elementId);
+
+        if (activeTool == WorkspaceTool.PROBE) {
+            resultsWindow.setVisible(true);
+            resultsWindow.setActiveTab(ResultsWindow.ResultTab.PLOT);
+            statusMessageValue.setText("Sonda ustawiona na śladzie aktywnego elementu " + elementId + ".");
+            return;
+        }
+
+        if (activeTool.isPlacementTool()) {
+            statusMessageValue.setText("Wybrano " + elementId + ". Kliknij pusty obszar, aby dodać kolejny element typu "
+                    + activeComponent.label() + ".");
+            return;
+        }
+
+        statusMessageValue.setText("Zaznaczono " + elementId + ".");
+    }
+
+    private void addElementAt(WorkspaceMockService.ElementType type, double canvasX, double canvasY) {
+        WorkspaceMockService.WorkspaceElement element =
+                workspaceMockService.createElement(workspaceElements.values(), type, canvasX, canvasY);
+        workspaceElements.put(element.id(), element);
+        selectedElementId = element.id();
+        propertiesWindow.setVisible(true);
+        renderWorkspace();
+        refreshSelectionPanels();
+        statusMessageValue.setText("Dodano element " + element.id() + ". Kliknij arkusz, aby wstawić kolejny " + type.label() + ".");
+    }
+
+    private void deleteElement(String elementId) {
+        WorkspaceMockService.WorkspaceElement removed = workspaceElements.remove(elementId);
+        if (removed == null) {
+            return;
+        }
+
+        if (elementId.equals(selectedElementId)) {
+            selectedElementId = workspaceMockService.firstElement(workspaceElements)
+                    .map(WorkspaceMockService.WorkspaceElement::id)
+                    .orElse(null);
+        }
+
+        renderWorkspace();
+        refreshSelectionPanels();
+        statusMessageValue.setText("Usunięto element " + elementId + " z arkusza.");
+    }
+
+    private void moveSelectedElement(double deltaX, double deltaY, String directionLabel) {
+        if (selectedElementId == null) {
+            statusMessageValue.setText("Najpierw zaznacz element do przesunięcia.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        workspaceElements.put(selectedElementId, workspaceMockService.moveElement(element, deltaX, deltaY));
+        renderWorkspace();
+        refreshSelectionPanels();
+        statusMessageValue.setText("Przesunięto " + selectedElementId + " " + directionLabel + ".");
+    }
+
+    private void showSelection(String elementId) {
         selectedElementId = elementId;
         propertiesWindow.setVisible(true);
+        schematicPreview.setSelectedElement(selectedElementId);
         refreshSelectionPanels();
+    }
 
-        workspaceMockService.findElement(elementId).ifPresent(details -> {
-            if (activeTool == WorkspaceTool.PROBE) {
-                resultsWindow.setVisible(true);
-                resultsWindow.setActiveTab(ResultsWindow.ResultTab.PLOT);
-                statusMessageValue.setText("Sonda ustawiona na śladzie " + details.traceName() + ".");
-                return;
-            }
-
-            if (activeTool == WorkspaceTool.DELETE) {
-                statusMessageValue.setText("Tryb Usuń jest jeszcze makietą. " + details.id() + " nie został usunięty.");
-                return;
-            }
-
-            statusMessageValue.setText("Zaznaczono " + details.id() + ". Kliknij inny element na arkuszu.");
-        });
+    private void renderWorkspace() {
+        schematicPreview.renderWorkspace(workspaceElements.values());
+        schematicPreview.setSelectedElement(selectedElementId);
     }
 
     private void refreshSelectionPanels() {
         if (selectedElementId == null) {
+            propertiesWindow.clear("Brak zaznaczonego elementu. Dodaj nowy komponent albo wybierz istniejący.");
+            resultsWindow.clear(analysisLabel, simulationReady,
+                    "Brak aktywnego elementu. Zaznacz komponent, aby zobaczyć mockowane wyniki.");
+            schematicPreview.setSelectedElement(null);
             return;
         }
 
-        workspaceMockService.findElement(selectedElementId).ifPresent(details -> {
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            selectedElementId = null;
+            refreshSelectionPanels();
+            return;
+        }
+
+        workspaceMockService.describeElement(element).ifPresent(details -> {
             propertiesWindow.update(details, simulationReady);
             resultsWindow.update(details, analysisLabel, simulationReady);
             schematicPreview.setSelectedElement(selectedElementId);
@@ -149,6 +255,11 @@ public class MainLayout extends Div {
     }
 
     private void runSimulation() {
+        if (workspaceElements.isEmpty()) {
+            statusMessageValue.setText("Dodaj elementy na arkusz, zanim uruchomisz symulację.");
+            return;
+        }
+
         simulationReady = true;
         resultsWindow.setVisible(true);
         resultsWindow.setActiveTab(ResultsWindow.ResultTab.SUMMARY);
@@ -204,6 +315,12 @@ public class MainLayout extends Div {
         if (!silent) {
             statusMessageValue.setText("Aktywny komponent biblioteki: " + component.label() + ".");
         }
+    }
+
+    private void activateComponentPlacement(QuickComponent component) {
+        setActiveComponent(component, true);
+        setActiveTool(WorkspaceTool.forElementType(component.type()), true);
+        statusMessageValue.setText("Tryb wstawiania: " + component.label() + ". Kliknij arkusz, aby dodać element.");
     }
 
     private void applyComponentFilter(String filterValue) {
@@ -327,8 +444,21 @@ public class MainLayout extends Div {
         Span fitView = createAction("Dopasuj", "mini-button");
         fitView.addClickListener(event -> fitView());
 
+        Span moveLeft = createAction("←", "mini-button");
+        moveLeft.addClickListener(event -> moveSelectedElement(-MOVE_STEP, 0, "w lewo"));
+
+        Span moveUp = createAction("↑", "mini-button");
+        moveUp.addClickListener(event -> moveSelectedElement(0, -MOVE_STEP, "w górę"));
+
+        Span moveDown = createAction("↓", "mini-button");
+        moveDown.addClickListener(event -> moveSelectedElement(0, MOVE_STEP, "w dół"));
+
+        Span moveRight = createAction("→", "mini-button");
+        moveRight.addClickListener(event -> moveSelectedElement(MOVE_STEP, 0, "w prawo"));
+
         Span help = createAction("?", "icon-button");
-        help.addClickListener(event -> statusMessageValue.setText("Skróty makiety: W - przewód, S - sonda, X - usuń, kliknięcie elementu - podgląd."));
+        help.addClickListener(event -> statusMessageValue.setText(
+                "Zaznacz element, aby go przesuwać. Kliknij szybki komponent, aby wstawić nowy na arkusz."));
 
         toolbar.add(buildToolbarGroup(
                 newProject,
@@ -342,6 +472,9 @@ public class MainLayout extends Div {
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
+
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(createLabel("Przesuń"), moveLeft, moveUp, moveDown, moveRight));
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(
@@ -366,7 +499,7 @@ public class MainLayout extends Div {
         Span openLibrary = createAction("Komponent...", "tool-button");
         openLibrary.addClickListener(event -> {
             componentSearch.focus();
-            statusMessageValue.setText("Filtruj bibliotekę szybką, aby wybrać aktywny komponent.");
+            statusMessageValue.setText("Filtruj bibliotekę szybką albo kliknij symbol, aby aktywować tryb wstawiania.");
         });
 
         componentBar.add(buildComponentGroup(openLibrary, createLabel("Biblioteka")));
@@ -463,7 +596,7 @@ public class MainLayout extends Div {
     private Div createQuickComponent(QuickComponent component) {
         Div button = new Div();
         button.addClassName("quick-component");
-        button.addClickListener(event -> setActiveComponent(component, false));
+        button.addClickListener(event -> activateComponentPlacement(component));
 
         Span symbol = new Span(component.glyph());
         symbol.addClassName("quick-component-glyph");
@@ -546,19 +679,28 @@ public class MainLayout extends Div {
     }
 
     private enum WorkspaceTool {
-        SELECT("select", "Zaznacz", "Z"),
-        WIRE("wire", "Przewód", "W"),
-        PROBE("probe", "Sonda", "S"),
-        DELETE("delete", "Usuń", "X");
+        SELECT("select", "Zaznacz", "Z", null),
+        WIRE("wire", "Przewód", "W", null),
+        PROBE("probe", "Sonda", "S", null),
+        DELETE("delete", "Usuń", "X", null),
+        PLACE_RESISTOR("resistor", "Wstaw: Rezystor", "", WorkspaceMockService.ElementType.RESISTOR),
+        PLACE_CAPACITOR("capacitor", "Wstaw: Kondensator", "", WorkspaceMockService.ElementType.CAPACITOR),
+        PLACE_INDUCTOR("inductor", "Wstaw: Cewka", "", WorkspaceMockService.ElementType.INDUCTOR),
+        PLACE_VOLTAGE("voltage", "Wstaw: Źródło", "", WorkspaceMockService.ElementType.VOLTAGE),
+        PLACE_GROUND("ground", "Wstaw: Masa", "", WorkspaceMockService.ElementType.GROUND),
+        PLACE_DIODE("diode", "Wstaw: Dioda", "", WorkspaceMockService.ElementType.DIODE),
+        PLACE_OPAMP("opamp", "Wstaw: Wzmacniacz", "", WorkspaceMockService.ElementType.OPAMP);
 
         private final String key;
         private final String label;
         private final String shortLabel;
+        private final WorkspaceMockService.ElementType elementType;
 
-        WorkspaceTool(String key, String label, String shortLabel) {
+        WorkspaceTool(String key, String label, String shortLabel, WorkspaceMockService.ElementType elementType) {
             this.key = key;
             this.label = label;
             this.shortLabel = shortLabel;
+            this.elementType = elementType;
         }
 
         public String key() {
@@ -572,23 +714,45 @@ public class MainLayout extends Div {
         public String shortLabel() {
             return shortLabel;
         }
+
+        public WorkspaceMockService.ElementType elementType() {
+            return elementType;
+        }
+
+        public boolean isPlacementTool() {
+            return elementType != null;
+        }
+
+        public static WorkspaceTool forElementType(WorkspaceMockService.ElementType elementType) {
+            return switch (elementType) {
+                case RESISTOR -> PLACE_RESISTOR;
+                case CAPACITOR -> PLACE_CAPACITOR;
+                case INDUCTOR -> PLACE_INDUCTOR;
+                case VOLTAGE -> PLACE_VOLTAGE;
+                case GROUND -> PLACE_GROUND;
+                case DIODE -> PLACE_DIODE;
+                case OPAMP -> PLACE_OPAMP;
+            };
+        }
     }
 
     private enum QuickComponent {
-        RESISTOR("R", "Rezystor"),
-        CAPACITOR("C", "Kondensator"),
-        INDUCTOR("L", "Cewka"),
-        VOLTAGE("V", "Źródło"),
-        GROUND("0", "Masa"),
-        DIODE("D", "Dioda"),
-        OPAMP("OP", "Wzmacniacz");
+        RESISTOR("R", "Rezystor", WorkspaceMockService.ElementType.RESISTOR),
+        CAPACITOR("C", "Kondensator", WorkspaceMockService.ElementType.CAPACITOR),
+        INDUCTOR("L", "Cewka", WorkspaceMockService.ElementType.INDUCTOR),
+        VOLTAGE("V", "Źródło", WorkspaceMockService.ElementType.VOLTAGE),
+        GROUND("0", "Masa", WorkspaceMockService.ElementType.GROUND),
+        DIODE("D", "Dioda", WorkspaceMockService.ElementType.DIODE),
+        OPAMP("OP", "Wzmacniacz", WorkspaceMockService.ElementType.OPAMP);
 
         private final String glyph;
         private final String label;
+        private final WorkspaceMockService.ElementType type;
 
-        QuickComponent(String glyph, String label) {
+        QuickComponent(String glyph, String label, WorkspaceMockService.ElementType type) {
             this.glyph = glyph;
             this.label = label;
+            this.type = type;
         }
 
         public String glyph() {
@@ -597,6 +761,10 @@ public class MainLayout extends Div {
 
         public String label() {
             return label;
+        }
+
+        public WorkspaceMockService.ElementType type() {
+            return type;
         }
 
         public boolean matches(String filter) {

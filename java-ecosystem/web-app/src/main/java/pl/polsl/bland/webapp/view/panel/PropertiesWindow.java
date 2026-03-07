@@ -31,6 +31,26 @@ public final class PropertiesWindow extends Div {
         add(buildTitleBar(), buildBody());
     }
 
+    public void clear(String message) {
+        caption.setText("Brak aktywnego elementu");
+        propId.setText("-");
+        propType.setText("-");
+        propValue.setText("-");
+        propNodeA.setText("-");
+        propNodeB.setText("-");
+        propOrientation.setText("-");
+        propDescription.setText(message);
+        simTrace.setText("-");
+        simPeak.setText("-");
+        simMin.setText("-");
+        simRms.setText("-");
+        simTmax.setText("-");
+        simNote.setText(message);
+        simulationEmptyState.setText(message);
+        simulationEmptyState.setVisible(true);
+        simulationData.setVisible(false);
+    }
+
     public void update(WorkspaceMockService.ElementDetails details, boolean simulationReady) {
         caption.setText("Aktywny element: " + details.id());
         propId.setText(details.id());

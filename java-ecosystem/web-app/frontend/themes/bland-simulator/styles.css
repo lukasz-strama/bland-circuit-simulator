@@ -304,6 +304,16 @@ vaadin-text-field.component-search {
   cursor: not-allowed;
 }
 
+.workspace-panel[data-tool="resistor"] .workspace-viewport,
+.workspace-panel[data-tool="capacitor"] .workspace-viewport,
+.workspace-panel[data-tool="inductor"] .workspace-viewport,
+.workspace-panel[data-tool="voltage"] .workspace-viewport,
+.workspace-panel[data-tool="ground"] .workspace-viewport,
+.workspace-panel[data-tool="diode"] .workspace-viewport,
+.workspace-panel[data-tool="opamp"] .workspace-viewport {
+  cursor: copy;
+}
+
 .workspace-viewport {
   position: absolute;
   inset: 0;
@@ -645,13 +655,17 @@ vaadin-text-field.component-search {
 .selection-halo,
 .component-circle,
 .component-loop,
+.component-diode-body,
+.component-opamp-body,
 .wire-node,
 .sheet-text,
 .sheet-node-label,
 .component-label,
+.component-marker,
 .component-value,
 .wire-segment,
 .component-line,
+.component-diode-bar,
 .title-divider {
   position: absolute;
   box-sizing: border-box;
@@ -659,6 +673,18 @@ vaadin-text-field.component-search {
 
 .sheet-layer {
   inset: 0;
+}
+
+.sheet-static {
+  pointer-events: none;
+}
+
+.sheet-layer.is-dynamic {
+  pointer-events: none;
+}
+
+.sheet-layer.is-dynamic .schematic-part {
+  pointer-events: auto;
 }
 
 .sheet-title-block {
@@ -758,6 +784,41 @@ vaadin-text-field.component-search {
   transform: rotate(45deg);
 }
 
+.component-diode-body,
+.component-opamp-body {
+  background: transparent;
+}
+
+.component-diode-body::before,
+.component-opamp-body::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.component-diode-body::before {
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  border: 3.2px solid var(--component-stroke);
+}
+
+.component-diode-bar {
+  height: 0;
+  border-top: 3.2px solid var(--component-stroke);
+  transform-origin: top left;
+  border-radius: 999px;
+}
+
+.component-opamp-body::before {
+  clip-path: polygon(0 0, 100% 50%, 0 100%);
+  border: 3.2px solid var(--component-stroke);
+}
+
+.component-marker {
+  color: #355b86;
+  font-size: 22px;
+  font-weight: 700;
+}
+
 .component-label {
   color: #20344d;
   font-size: 22px;
@@ -774,7 +835,8 @@ vaadin-text-field.component-search {
 }
 
 .schematic-part.is-selected .component-label,
-.schematic-part.is-selected .component-value {
+.schematic-part.is-selected .component-value,
+.schematic-part.is-selected .component-marker {
   color: #2d6aa1;
 }
 

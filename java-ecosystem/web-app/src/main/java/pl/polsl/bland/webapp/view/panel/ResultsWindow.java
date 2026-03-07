@@ -10,6 +10,7 @@ import com.vaadin.flow.component.html.Span;
 import pl.polsl.bland.webapp.service.WorkspaceMockService;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 
 public final class ResultsWindow extends Div {
@@ -50,6 +51,22 @@ public final class ResultsWindow extends Div {
         closeButton.addClickListener(event -> closeHandler.run());
         add(buildTitleBar(), buildBody());
         setActiveTab(ResultTab.SUMMARY);
+    }
+
+    public void clear(String analysisLabel, boolean simulationReady, String message) {
+        caption.setText("Brak aktywnego elementu");
+        analysisBadge.setText(analysisLabel);
+        plotTitle.setText("Aktywny ślad: brak");
+        plotHint.setText(message);
+        netlistBox.setText("* Zaznacz element, aby zobaczyć mockowaną netlistę.");
+        resultsGrid.setItems(List.of());
+        logList.removeAll();
+        logList.add(new Div(new Text(message)));
+        summaryPlaceholder.setText(simulationReady
+                ? message
+                : "Brak wyników. Zaznacz element i uruchom symulację, aby wypełnić zakładki danymi.");
+        summaryPlaceholder.setVisible(true);
+        resultsGrid.setVisible(false);
     }
 
     public void update(WorkspaceMockService.ElementDetails details, String analysisLabel, boolean simulationReady) {
