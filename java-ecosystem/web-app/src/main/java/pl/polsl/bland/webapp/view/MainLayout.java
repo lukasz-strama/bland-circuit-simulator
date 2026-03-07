@@ -40,6 +40,7 @@ public class MainLayout extends Div {
     private final Span activeSymbolReadout = createWideReadout("");
     private final Span undoButton = createAction("Cofnij", "tool-button");
     private final Span redoButton = createAction("Ponów", "tool-button");
+    private final Span loadProjectButton = createAction("Wczytaj", "tool-button");
     private final Span toolbarToolValue = createReadout("");
     private final Span selectedElementReadout = createWideReadout("brak");
     private final Span selectedNetReadout = createWideReadout("brak");
@@ -72,6 +73,7 @@ public class MainLayout extends Div {
     private WorkspaceMockService.WireEndpoint pendingWireEndpoint;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private int historyIndex = -1;
+    private ProjectSnapshot savedProjectSnapshot;
     private double zoom = DEFAULT_ZOOM;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
@@ -112,6 +114,7 @@ public class MainLayout extends Div {
         configureElementValueField();
         configureNetNameField();
         configureHistoryButtons();
+        configureProjectButtons();
         configureFloatingWindows();
 
         addClassName("main-view");
@@ -155,6 +158,11 @@ public class MainLayout extends Div {
         undoButton.addClickListener(event -> undoWorkspaceChange());
         redoButton.addClickListener(event -> redoWorkspaceChange());
         updateHistoryControls();
+    }
+
+    private void configureProjectButtons() {
+        loadProjectButton.addClickListener(event -> loadSavedProject());
+        updateProjectControls();
     }
 
     private void configureFloatingWindows() {
@@ -514,6 +522,69 @@ public class MainLayout extends Div {
     private void updateHistoryControls() {
         setClass(undoButton, "is-disabled", historyIndex <= 0);
         setClass(redoButton, "is-disabled", historyIndex < 0 || historyIndex >= workspaceHistory.size() - 1);
+    }
+
+    private void saveCurrentProject() {
+        savedProjectSnapshot = captureProjectSnapshot();
+        updateProjectControls();
+        statusMessageValue.setText("Zapisano projekt mockowany: "
+                + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
+    }
+
+    private void loadSavedProject() {
+        if (savedProjectSnapshot == null) {
+            statusMessageValue.setText("Brak zapisanego projektu do wczytania.");
+            updateProjectControls();
+            return;
+        }
+
+        restoreProjectSnapshot(savedProjectSnapshot);
+        initializeWorkspaceHistory();
+        updateProjectControls();
+        statusMessageValue.setText("Wczytano ostatnio zapisany projekt mockowany.");
+    }
+
+    private ProjectSnapshot captureProjectSnapshot() {
+        return new ProjectSnapshot(
+                new LinkedHashMap<>(workspaceElements),
+                new LinkedHashMap<>(workspaceWires),
+                new LinkedHashMap<>(netAliases),
+                analysisLabel,
+                activeComponent,
+                selectedElementId,
+                selectedWireId,
+                selectedNetKey,
+                simulationReady,
+                resultsWindow.isVisible(),
+                propertiesWindow.isVisible(),
+                zoom);
+    }
+
+    private void restoreProjectSnapshot(ProjectSnapshot snapshot) {
+        workspaceElements.clear();
+        workspaceElements.putAll(snapshot.elements());
+        workspaceWires.clear();
+        workspaceWires.putAll(snapshot.wires());
+        netAliases.clear();
+        netAliases.putAll(snapshot.netAliases());
+        selectedElementId = snapshot.selectedElementId();
+        selectedWireId = snapshot.selectedWireId();
+        selectedNetKey = snapshot.selectedNetKey();
+        pendingWireStart = null;
+        pendingWireEndpoint = null;
+        simulationReady = snapshot.simulationReady();
+        setAnalysis(snapshot.analysisLabel(), true, true);
+        setActiveComponent(snapshot.activeComponent(), true);
+        setActiveTool(WorkspaceTool.SELECT, true);
+        setZoom(snapshot.zoom(), true);
+        propertiesWindow.setVisible(snapshot.propertiesVisible());
+        resultsWindow.setVisible(snapshot.resultsVisible());
+        refreshWorkspaceState();
+        updateSimulationIndicators();
+    }
+
+    private void updateProjectControls() {
+        setClass(loadProjectButton, "is-disabled", savedProjectSnapshot == null);
     }
 
     private void renderWorkspace() {
@@ -1069,10 +1140,7 @@ public class MainLayout extends Div {
         newProject.addClickListener(event -> resetWorkspace());
 
         Span saveProject = createAction("Zapisz", "tool-button");
-        saveProject.addClickListener(event -> statusMessageValue.setText("Zapis zostanie podpięty po integracji z backendem."));
-
-        Span exportProject = createAction("Eksport", "tool-button");
-        exportProject.addClickListener(event -> statusMessageValue.setText("Eksport jest jeszcze makietą interfejsu."));
+        saveProject.addClickListener(event -> saveCurrentProject());
 
         Span simulate = createAction("Symuluj", "tool-button", "is-primary");
         simulate.addClickListener(event -> runSimulation());
@@ -1141,7 +1209,7 @@ public class MainLayout extends Div {
                 undoButton,
                 redoButton,
                 saveProject,
-                exportProject,
+                loadProjectButton,
                 simulate,
                 showResults));
 
@@ -1403,6 +1471,21 @@ public class MainLayout extends Div {
             boolean simulationReady,
             boolean resultsVisible,
             boolean propertiesVisible) {
+    }
+
+    private record ProjectSnapshot(
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
+            LinkedHashMap<String, String> netAliases,
+            String analysisLabel,
+            QuickComponent activeComponent,
+            String selectedElementId,
+            String selectedWireId,
+            String selectedNetKey,
+            boolean simulationReady,
+            boolean resultsVisible,
+            boolean propertiesVisible,
+            double zoom) {
     }
 
     private enum WorkspaceTool {
