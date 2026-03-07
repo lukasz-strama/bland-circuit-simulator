@@ -1,8 +1,16 @@
 #pragma once
 
 #include <cstddef>
+#include <limits>
 #include <string>
 #include <variant>
+
+namespace core {
+
+inline constexpr std::size_t GROUND_NODE =
+    std::numeric_limits<std::size_t>::max();
+
+} // namespace core
 
 namespace core {
 
