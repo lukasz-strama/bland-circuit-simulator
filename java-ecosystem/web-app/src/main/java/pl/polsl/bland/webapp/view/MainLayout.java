@@ -55,6 +55,7 @@ public class MainLayout extends Div {
     private QuickComponent activeComponent = QuickComponent.RESISTOR;
     private String selectedElementId;
     private WorkspaceMockService.PinRef pendingWireStart;
+    private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private double zoom = DEFAULT_ZOOM;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
@@ -140,8 +141,7 @@ public class MainLayout extends Div {
         selectedElementId = workspaceMockService.firstElement(workspaceElements)
                 .map(WorkspaceMockService.WorkspaceElement::id)
                 .orElse(null);
-        renderWorkspace();
-        refreshSelectionPanels();
+        refreshWorkspaceState();
         updateSimulationIndicators();
         statusMessageValue.setText("Nowy projekt mockowany został przygotowany.");
     }
@@ -206,8 +206,7 @@ public class MainLayout extends Div {
         workspaceElements.put(element.id(), element);
         selectedElementId = element.id();
         propertiesWindow.setVisible(true);
-        renderWorkspace();
-        refreshSelectionPanels();
+        refreshWorkspaceState();
         statusMessageValue.setText("Dodano element " + element.id() + ". Kliknij arkusz, aby wstawić kolejny " + type.label() + ".");
     }
 
@@ -224,8 +223,7 @@ public class MainLayout extends Div {
                     .orElse(null);
         }
 
-        renderWorkspace();
-        refreshSelectionPanels();
+        refreshWorkspaceState();
         statusMessageValue.setText("Usunięto element " + elementId + " z arkusza razem z " + removedWireCount + " przewodami.");
     }
 
@@ -242,8 +240,7 @@ public class MainLayout extends Div {
         }
 
         workspaceElements.put(selectedElementId, workspaceMockService.moveElement(element, deltaX, deltaY));
-        renderWorkspace();
-        refreshSelectionPanels();
+        refreshWorkspaceState();
         statusMessageValue.setText("Przesunięto " + selectedElementId + " " + directionLabel + ".");
     }
 
@@ -302,7 +299,7 @@ public class MainLayout extends Div {
                 .ifPresentOrElse(wire -> {
                     workspaceWires.put(wire.id(), wire);
                     clearPendingWire();
-                    renderWorkspace();
+                    refreshWorkspaceState();
                     statusMessageValue.setText(
                             "Dodano przewód " + wire.id() + " między "
                                     + wire.start().elementId() + ":" + wire.start().pinKey()
@@ -318,7 +315,7 @@ public class MainLayout extends Div {
 
         if (activeTool == WorkspaceTool.DELETE) {
             workspaceWires.remove(wireId);
-            renderWorkspace();
+            refreshWorkspaceState();
             statusMessageValue.setText("Usunięto przewód " + wireId + ".");
             return;
         }
@@ -331,10 +328,17 @@ public class MainLayout extends Div {
         statusMessageValue.setText("Wybrano przewód " + wireId + ".");
     }
 
+    private void refreshWorkspaceState() {
+        workspaceNetTopology = workspaceMockService.resolveNetTopology(workspaceElements, workspaceWires.values());
+        renderWorkspace();
+        refreshSelectionPanels();
+    }
+
     private void renderWorkspace() {
         schematicPreview.renderWorkspace(
                 workspaceElements.values(),
-                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()));
+                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()),
+                workspaceNetTopology.nets());
         schematicPreview.setSelectedElement(selectedElementId);
         schematicPreview.setPendingWireStart(pendingWireStart);
     }
@@ -355,7 +359,7 @@ public class MainLayout extends Div {
             return;
         }
 
-        workspaceMockService.describeElement(element).ifPresent(details -> {
+        workspaceMockService.describeElement(workspaceElements, workspaceNetTopology, element).ifPresent(details -> {
             propertiesWindow.update(details, simulationReady);
             resultsWindow.update(details, analysisLabel, simulationReady);
             schematicPreview.setSelectedElement(selectedElementId);

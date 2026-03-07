@@ -2,14 +2,17 @@ package pl.polsl.bland.webapp.service;
 
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 @Service
 public class WorkspaceMockService {
@@ -289,12 +292,64 @@ public class WorkspaceMockService {
         return resolved;
     }
 
-    public Optional<ElementDetails> describeElement(WorkspaceElement element) {
+    public NetTopology resolveNetTopology(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
+        LinkedHashMap<PinRef, PinPosition> pins = new LinkedHashMap<>();
+        LinkedHashMap<PinRef, List<PinRef>> adjacency = new LinkedHashMap<>();
+
+        for (WorkspaceElement element : elements.values()) {
+            for (PinPosition pin : pinsForElement(element)) {
+                PinRef pinRef = new PinRef(pin.elementId(), pin.pinKey());
+                pins.put(pinRef, pin);
+                adjacency.put(pinRef, new ArrayList<>());
+            }
+        }
+
+        for (WorkspaceWire wire : wires) {
+            if (!pins.containsKey(wire.start()) || !pins.containsKey(wire.end())) {
+                continue;
+            }
+            adjacency.get(wire.start()).add(wire.end());
+            adjacency.get(wire.end()).add(wire.start());
+        }
+
+        LinkedHashMap<PinRef, String> pinNetNames = new LinkedHashMap<>();
+        List<ResolvedNet> nets = new ArrayList<>();
+        Set<PinRef> visited = new LinkedHashSet<>();
+        Set<String> usedNames = new LinkedHashSet<>();
+        int nextGenericIndex = 1;
+
+        for (PinRef start : pins.keySet()) {
+            if (visited.contains(start)) {
+                continue;
+            }
+
+            List<PinRef> component = collectConnectedPins(start, adjacency, visited);
+            String preferredName = preferredNetName(component, elements);
+            String netName = preferredName;
+            if (netName == null || usedNames.contains(netName)) {
+                do {
+                    netName = "N%03d".formatted(nextGenericIndex++);
+                } while (usedNames.contains(netName));
+            }
+
+            usedNames.add(netName);
+            String resolvedNetName = netName;
+            component.forEach(pin -> pinNetNames.put(pin, resolvedNetName));
+            nets.add(createResolvedNet(resolvedNetName, component, pins));
+        }
+
+        return new NetTopology(pinNetNames, nets);
+    }
+
+    public Optional<ElementDetails> describeElement(
+            Map<String, WorkspaceElement> elements,
+            NetTopology topology,
+            WorkspaceElement element) {
         ElementTemplate template = templates.get(element.type());
         if (template == null) {
             return Optional.empty();
         }
-        return Optional.of(template.describe(element));
+        return Optional.of(template.describe(element, elements.values(), topology));
     }
 
     public Optional<WorkspaceElement> firstElement(Map<String, WorkspaceElement> elements) {
@@ -303,6 +358,10 @@ public class WorkspaceMockService {
 
     public boolean isWireAttachedToElement(WorkspaceWire wire, String elementId) {
         return wire.start().elementId().equals(elementId) || wire.end().elementId().equals(elementId);
+    }
+
+    public String summarizeNets(NetTopology topology) {
+        return summarizeNetNames(topology);
     }
 
     private int nextSequence(Collection<WorkspaceElement> elements, ElementType type) {
@@ -364,6 +423,73 @@ public class WorkspaceMockService {
         }
 
         return Optional.of(new ResolvedWire(wire.id(), wire.start(), wire.end(), segments, path));
+    }
+
+    private List<PinRef> collectConnectedPins(
+            PinRef start,
+            Map<PinRef, List<PinRef>> adjacency,
+            Set<PinRef> visited) {
+        ArrayDeque<PinRef> queue = new ArrayDeque<>();
+        List<PinRef> connected = new ArrayList<>();
+        queue.add(start);
+        visited.add(start);
+
+        while (!queue.isEmpty()) {
+            PinRef current = queue.removeFirst();
+            connected.add(current);
+            for (PinRef next : adjacency.getOrDefault(current, List.of())) {
+                if (visited.add(next)) {
+                    queue.addLast(next);
+                }
+            }
+        }
+
+        return connected;
+    }
+
+    private ResolvedNet createResolvedNet(String netName, List<PinRef> component, Map<PinRef, PinPosition> pins) {
+        PinPosition anchor = null;
+        for (PinRef pinRef : component) {
+            PinPosition candidate = pins.get(pinRef);
+            if (candidate == null) {
+                continue;
+            }
+            if (anchor == null
+                    || candidate.y() < anchor.y()
+                    || (sameCoordinate(candidate.y(), anchor.y()) && candidate.x() < anchor.x())) {
+                anchor = candidate;
+            }
+        }
+
+        double labelX = anchor == null ? GRID_LEFT : anchor.x() + 10;
+        double labelY = anchor == null ? GRID_TOP : Math.max(GRID_TOP - 8, anchor.y() - 18);
+        return new ResolvedNet(netName, List.copyOf(component), labelX, labelY);
+    }
+
+    private String preferredNetName(List<PinRef> component, Map<String, WorkspaceElement> elements) {
+        if (containsPin(component, elements, ElementType.GROUND, "REF")) {
+            return "0";
+        }
+        if (containsPin(component, elements, ElementType.VOLTAGE, "POS")) {
+            return "IN";
+        }
+        if (containsPin(component, elements, ElementType.OPAMP, "OUT")) {
+            return "OUT";
+        }
+        if (containsPin(component, elements, ElementType.OPAMP, "IN+")) {
+            return "INP";
+        }
+        if (containsPin(component, elements, ElementType.OPAMP, "IN-")) {
+            return "INN";
+        }
+        return null;
+    }
+
+    private boolean containsPin(List<PinRef> component, Map<String, WorkspaceElement> elements, ElementType type, String pinKey) {
+        return component.stream().anyMatch(pinRef -> {
+            WorkspaceElement element = elements.get(pinRef.elementId());
+            return element != null && element.type() == type && pinRef.pinKey().equals(pinKey);
+        });
     }
 
     private List<WirePoint> route(PinPosition start, PinPosition end) {
@@ -432,6 +558,115 @@ public class WorkspaceMockService {
                 default -> Optional.empty();
             };
         };
+    }
+
+    private List<PinPosition> pinsForElement(WorkspaceElement element) {
+        List<PinPosition> pins = new ArrayList<>();
+        for (String pinKey : pinKeys(element.type())) {
+            resolvePin(element, pinKey).ifPresent(pins::add);
+        }
+        return pins;
+    }
+
+    private List<String> pinKeys(ElementType type) {
+        return switch (type) {
+            case RESISTOR, INDUCTOR, CAPACITOR -> List.of("A", "B");
+            case VOLTAGE -> List.of("POS", "NEG");
+            case GROUND -> List.of("REF");
+            case DIODE -> List.of("ANODE", "CATHODE");
+            case OPAMP -> List.of("IN+", "IN-", "OUT");
+        };
+    }
+
+    private static Optional<PinRef> primaryPinA(WorkspaceElement element) {
+        return switch (element.type()) {
+            case RESISTOR, INDUCTOR, CAPACITOR -> Optional.of(new PinRef(element.id(), "A"));
+            case VOLTAGE -> Optional.of(new PinRef(element.id(), "POS"));
+            case GROUND -> Optional.of(new PinRef(element.id(), "REF"));
+            case DIODE -> Optional.of(new PinRef(element.id(), "ANODE"));
+            case OPAMP -> Optional.of(new PinRef(element.id(), "IN+"));
+        };
+    }
+
+    private static Optional<PinRef> primaryPinB(WorkspaceElement element) {
+        return switch (element.type()) {
+            case RESISTOR, INDUCTOR, CAPACITOR -> Optional.of(new PinRef(element.id(), "B"));
+            case VOLTAGE -> Optional.of(new PinRef(element.id(), "NEG"));
+            case GROUND -> Optional.empty();
+            case DIODE -> Optional.of(new PinRef(element.id(), "CATHODE"));
+            case OPAMP -> Optional.of(new PinRef(element.id(), "IN-"));
+        };
+    }
+
+    private static String resolveNodeName(NetTopology topology, Optional<PinRef> pinRef, String fallback) {
+        return pinRef.map(ref -> topology.netName(ref, fallback)).orElse(fallback);
+    }
+
+    private static String buildTraceName(WorkspaceElement element, NetTopology topology, String nodeA, String nodeB) {
+        return switch (element.type()) {
+            case RESISTOR, INDUCTOR, VOLTAGE, DIODE -> "I(" + element.id() + ")";
+            case CAPACITOR -> "V(" + preferredVoltageNet(nodeA, nodeB) + ")";
+            case GROUND -> "V(0)";
+            case OPAMP -> "V(" + topology.netName(new PinRef(element.id(), "OUT"), "OUT") + ")";
+        };
+    }
+
+    private static String buildWorkspaceNetlist(
+            Collection<WorkspaceElement> elements,
+            NetTopology topology,
+            WorkspaceElement focusedElement,
+            String traceName) {
+        StringBuilder builder = new StringBuilder();
+        builder.append("* Mockowany netlist frontendowy\n");
+        builder.append("* Aktywny element: ").append(focusedElement.id()).append('\n');
+        builder.append("* Wykryte nety: ").append(summarizeNetNames(topology)).append('\n');
+
+        for (WorkspaceElement element : elements) {
+            if (element.id().equals(focusedElement.id())) {
+                builder.append("* > ");
+            }
+            builder.append(formatNetlistLine(element, topology)).append('\n');
+        }
+
+        builder.append(".probe ").append(traceName).append('\n');
+        builder.append(".simulate type=transient tstop=0.008 tstep=0.0001");
+        return builder.toString();
+    }
+
+    private static String formatNetlistLine(WorkspaceElement element, NetTopology topology) {
+        String nodeA = resolveNodeName(topology, primaryPinA(element), "NC_A");
+        String nodeB = resolveNodeName(topology, primaryPinB(element), "NC_B");
+
+        return switch (element.type()) {
+            case RESISTOR -> element.id() + " " + nodeA + " " + nodeB + " 120";
+            case INDUCTOR -> element.id() + " " + nodeA + " " + nodeB + " 22m";
+            case CAPACITOR -> element.id() + " " + nodeA + " " + nodeB + " 4.7u";
+            case VOLTAGE -> element.id() + " " + nodeA + " " + nodeB + " SIN(0 5 1k)";
+            case GROUND -> "* " + element.id() + " -> net 0";
+            case DIODE -> element.id() + " " + nodeA + " " + nodeB + " 1N4148";
+            case OPAMP -> "X" + element.id()
+                    + " " + topology.netName(new PinRef(element.id(), "IN+"), "INP")
+                    + " " + topology.netName(new PinRef(element.id(), "IN-"), "INN")
+                    + " " + topology.netName(new PinRef(element.id(), "OUT"), "OUT")
+                    + " uA741";
+        };
+    }
+
+    private static String preferredVoltageNet(String nodeA, String nodeB) {
+        if (!"0".equals(nodeA)) {
+            return nodeA;
+        }
+        return nodeB;
+    }
+
+    private static String summarizeNetNames(NetTopology topology) {
+        if (topology.nets().isEmpty()) {
+            return "brak połączeń";
+        }
+        return topology.nets().stream()
+                .map(ResolvedNet::name)
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("brak połączeń");
     }
 
     private static PinPosition pin(WorkspaceElement element, String pinKey, double relativeX, double relativeY) {
@@ -533,6 +768,25 @@ public class WorkspaceMockService {
             List<WirePoint> nodes) {
     }
 
+    public record ResolvedNet(
+            String name,
+            List<PinRef> members,
+            double labelX,
+            double labelY) {
+    }
+
+    public record NetTopology(
+            Map<PinRef, String> pinNetNames,
+            List<ResolvedNet> nets) {
+        public static NetTopology empty() {
+            return new NetTopology(Map.of(), List.of());
+        }
+
+        public String netName(PinRef pinRef, String fallback) {
+            return pinNetNames.getOrDefault(pinRef, fallback);
+        }
+    }
+
     public record ElementDetails(
             String id,
             String symbol,
@@ -574,19 +828,26 @@ public class WorkspaceMockService {
             String netlistTemplate,
             List<String> logsTemplate) {
 
-        private ElementDetails describe(WorkspaceElement element) {
-            String traceName = traceTemplate.formatted(element.id());
-            String netlist = format(netlistTemplate, element.id());
+        private ElementDetails describe(
+                WorkspaceElement element,
+                Collection<WorkspaceElement> allElements,
+                NetTopology topology) {
+            String resolvedNodeA = resolveNodeName(topology, primaryPinA(element), nodeA);
+            String resolvedNodeB = resolveNodeName(topology, primaryPinB(element), nodeB);
+            String traceName = buildTraceName(element, topology, resolvedNodeA, resolvedNodeB);
+            String netlist = buildWorkspaceNetlist(allElements, topology, element, traceName);
             List<String> logs = logsTemplate.stream()
                     .map(line -> format(line, element.id()))
-                    .toList();
+                    .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+            logs.add("Połączenia aktywne: A=" + resolvedNodeA + ", B=" + resolvedNodeB + ".");
+            logs.add("Dostępne nety: " + summarizeNetNames(topology) + ".");
             return new ElementDetails(
                     element.id(),
                     symbol,
                     typeLabel,
                     defaultValue,
-                    nodeA,
-                    nodeB,
+                    resolvedNodeA,
+                    resolvedNodeB,
                     orientation,
                     description,
                     traceName,

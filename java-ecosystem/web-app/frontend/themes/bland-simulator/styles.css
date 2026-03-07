@@ -662,6 +662,7 @@ vaadin-text-field.component-search {
 .wire-junction,
 .wire-pin,
 .sheet-text,
+.sheet-net-label,
 .sheet-node-label,
 .component-label,
 .component-marker,
@@ -728,6 +729,19 @@ vaadin-text-field.component-search {
 .sheet-node-label {
   color: #5b6777;
   font-size: 16px;
+}
+
+.sheet-net-label {
+  color: #274564;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+  background: rgba(245, 248, 252, 0.92);
+  padding: 2px 4px;
+  border: 1px solid rgba(110, 137, 165, 0.4);
+  border-radius: 2px;
 }
 
 .sheet-text.is-note {

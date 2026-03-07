@@ -31,11 +31,13 @@ public final class SchematicPreview extends Div {
 
     public void renderWorkspace(
             Collection<WorkspaceMockService.WorkspaceElement> elements,
-            Collection<WorkspaceMockService.ResolvedWire> wires) {
+            Collection<WorkspaceMockService.ResolvedWire> wires,
+            Collection<WorkspaceMockService.ResolvedNet> nets) {
         selectableParts.clear();
         selectablePins.clear();
         dynamicLayer.removeAll();
         wires.forEach(wire -> dynamicLayer.add(createWireAssembly(wire)));
+        nets.forEach(net -> dynamicLayer.add(netLabel(net)));
         elements.forEach(element -> dynamicLayer.add(createElementPart(element)));
     }
 
@@ -282,6 +284,12 @@ public final class SchematicPreview extends Div {
                 line("wire-segment", segment.x1(), segment.y1(), segment.x2(), segment.y2())));
         wire.nodes().forEach(node -> assembly.add(junction(node.x(), node.y())));
         return assembly;
+    }
+
+    private Component netLabel(WorkspaceMockService.ResolvedNet net) {
+        Span label = text("sheet-net-label", net.labelX(), net.labelY(), net.name());
+        label.getElement().setAttribute("data-net-name", net.name());
+        return label;
     }
 
     private Div part(WorkspaceMockService.WorkspaceElement element) {
