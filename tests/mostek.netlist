@@ -1,0 +1,20 @@
+* mostek wiena analiza stanow nieustalonych
+VSRC V1 VCC 0 type=sin val=10.0 freq=159.155
+
+* szeregowe RC
+RES R1 VCC N_SER val=1000
+CAP C1 N_SER N_LEFT val=1e-6
+
+* rownolegle RC
+RES R2 N_LEFT 0 val=1000
+CAP C2 N_LEFT 0 val=1e-6
+
+* dzielnik
+RES R3 VCC N_RIGHT val=2000
+RES R4 N_RIGHT 0 val=1000
+
+* obciazenie
+RES R_LOAD N_LEFT N_RIGHT val=500
+
+* probkowanie co 100 mikrosekund
+.SIMULATE type=trans tstop=0.03 tstep=0.0001
