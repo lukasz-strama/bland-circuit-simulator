@@ -27,7 +27,7 @@ System będzie oparty na architekturze klient-serwer z wykorzystaniem mikroserwi
     * Implementacja interaktywnego edytora schematów obwodów (Canvas).
     * Integracja z REST API (logowanie, zapis, symulacja) i generowanie wykresów.
 
-* **Osoba 4: Aplikacja webowa ([github.com/DanielSledz03](https://github.com/DanielSledz03))**
+* **Osoba 4: Aplikacja webowa** ([github.com/DanielSledz03](https://github.com/DanielSledz03))
     * Stworzenie interfejsu użytkownika w przeglądarce, powielającego funkcje wersji Desktop.
     * Implementacja webowego edytora schematów.
     * Integracja z REST API oraz wizualizacja wyników w przeglądarce.
