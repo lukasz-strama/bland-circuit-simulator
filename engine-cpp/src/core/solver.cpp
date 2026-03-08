@@ -174,12 +174,11 @@ SimulationResult solve_dc(const Circuit &circuit) {
 
     Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(A);
     if (!qr.isInvertible()) {
-        LOG_ERROR(
-            "Singular MNA matrix - possible short circuit of ideal voltage "
-            "sources");
+        LOG_ERROR("Singular MNA matrix in DC analysis");
         throw std::runtime_error(
-            "Singular matrix. Possible short circuit of ideal voltage "
-            "sources.");
+            "Singular matrix. Possible causes: short circuit of ideal "
+            "voltage sources, floating node, missing ground reference, "
+            "or open circuit with no DC path.");
     }
 
     Eigen::VectorXd x = qr.solve(b);
@@ -310,8 +309,9 @@ SimulationResult solve_transient(const Circuit &circuit, double t_start,
         if (!qr.isInvertible()) {
             LOG_ERROR("Singular MNA matrix at initial conditions (t=0)");
             throw std::runtime_error(
-                "Singular matrix at initial conditions. "
-                "Possible short circuit of ideal voltage sources.");
+                "Singular matrix at initial conditions. Possible causes: "
+                "short circuit of ideal voltage sources, floating node, "
+                "missing ground reference, or open circuit with no DC path.");
         }
 
         Eigen::VectorXd x = qr.solve(b);
