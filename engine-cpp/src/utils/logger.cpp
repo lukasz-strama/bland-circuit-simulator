@@ -56,7 +56,11 @@ static std::string timestamp_now() {
     const auto time = clock::to_time_t(now);
 
     std::tm buf{};
+#ifdef _WIN32
+    localtime_s(&buf, &time);
+#else
     localtime_r(&time, &buf);
+#endif
 
     std::ostringstream oss;
     oss << std::put_time(&buf, "%H:%M:%S") << '.' << std::setfill('0')
