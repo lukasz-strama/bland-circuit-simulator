@@ -827,6 +827,7 @@ vaadin-select.trace-select {
 .sheet-title-block,
 .wire-assembly,
 .schematic-part,
+.schematic-part-content,
 .selection-halo,
 .component-circle,
 .component-loop,
@@ -1022,6 +1023,10 @@ vaadin-select.trace-select {
 .schematic-part {
   --component-stroke: #355b86;
   cursor: pointer;
+}
+
+.schematic-part-content {
+  transform-origin: 50% 50%;
 }
 
 .selection-halo {
