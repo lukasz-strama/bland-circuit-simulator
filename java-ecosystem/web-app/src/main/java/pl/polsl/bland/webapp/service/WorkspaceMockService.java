@@ -466,12 +466,19 @@ public class WorkspaceMockService {
         return frequency == null ? "-" : formatNumericValue(frequency) + " Hz";
     }
 
-    public List<ResolvedWire> resolveWires(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
+    public List<ResolvedWire> resolveWires(
+            Map<String, WorkspaceElement> elements,
+            Collection<WorkspaceWire> wires,
+            WireRoutingMode routingMode) {
         List<ResolvedWire> resolved = new ArrayList<>();
         for (WorkspaceWire wire : wires) {
-            resolveWire(elements, wire).ifPresent(resolved::add);
+            resolveWire(elements, wire, routingMode).ifPresent(resolved::add);
         }
         return resolved;
+    }
+
+    public List<ResolvedWire> resolveWires(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
+        return resolveWires(elements, wires, WireRoutingMode.STRAIGHT);
     }
 
     public NetTopology resolveNetTopology(
@@ -549,8 +556,9 @@ public class WorkspaceMockService {
     public Optional<WireDetails> describeWire(
             Map<String, WorkspaceElement> elements,
             NetTopology topology,
-            WorkspaceWire wire) {
-        return resolveWire(elements, wire).map(resolvedWire -> {
+            WorkspaceWire wire,
+            WireRoutingMode routingMode) {
+        return resolveWire(elements, wire, routingMode).map(resolvedWire -> {
             String startPin = formatPin(wire.start());
             String endPin = formatPin(wire.end());
             String startNet = topology.netName(wire.start(), "?");
@@ -569,6 +577,13 @@ public class WorkspaceMockService {
                     "Segmenty ścieżki: " + resolvedWire.segments().size());
             return new WireDetails(wire.id(), startPin, endPin, startNet, endNet, geometry, description, netlist, logs);
         });
+    }
+
+    public Optional<WireDetails> describeWire(
+            Map<String, WorkspaceElement> elements,
+            NetTopology topology,
+            WorkspaceWire wire) {
+        return describeWire(elements, topology, wire, WireRoutingMode.STRAIGHT);
     }
 
     public Optional<WorkspaceElement> firstElement(Map<String, WorkspaceElement> elements) {
@@ -636,14 +651,17 @@ public class WorkspaceMockService {
                 defaultFrequency(type, sourceType));
     }
 
-    private Optional<ResolvedWire> resolveWire(Map<String, WorkspaceElement> elements, WorkspaceWire wire) {
+    private Optional<ResolvedWire> resolveWire(
+            Map<String, WorkspaceElement> elements,
+            WorkspaceWire wire,
+            WireRoutingMode routingMode) {
         Optional<PinPosition> start = resolvePin(elements, wire.start());
         Optional<PinPosition> end = resolvePin(elements, wire.end());
         if (start.isEmpty() || end.isEmpty()) {
             return Optional.empty();
         }
 
-        List<WirePoint> path = route(start.get(), end.get());
+        List<WirePoint> path = route(start.get(), end.get(), routingMode);
         List<WireSegment> segments = new ArrayList<>();
         for (int index = 0; index < path.size() - 1; index++) {
             WirePoint current = path.get(index);
@@ -744,7 +762,11 @@ public class WorkspaceMockService {
         });
     }
 
-    private List<WirePoint> route(PinPosition start, PinPosition end) {
+    private List<WirePoint> route(PinPosition start, PinPosition end, WireRoutingMode routingMode) {
+        if (routingMode == WireRoutingMode.STRAIGHT) {
+            return List.of(new WirePoint(start.x(), start.y()), new WirePoint(end.x(), end.y()));
+        }
+
         WirePoint startPoint = new WirePoint(start.x(), start.y());
         WirePoint endPoint = new WirePoint(end.x(), end.y());
 
@@ -1266,6 +1288,21 @@ public class WorkspaceMockService {
                 case DEG_180 -> DEG_270;
                 case DEG_270 -> DEG_0;
             };
+        }
+    }
+
+    public enum WireRoutingMode {
+        STRAIGHT("proste"),
+        ORTHOGONAL("łamane");
+
+        private final String label;
+
+        WireRoutingMode(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
         }
     }
 

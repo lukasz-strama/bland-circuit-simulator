@@ -73,6 +73,7 @@ public class MainLayout extends Div {
     private final Pre simulationDirectivePreview = new Pre();
     private final Select<String> analysisSelect = new Select<>();
     private final Select<String> sourceTypeSelect = new Select<>();
+    private final Select<WorkspaceMockService.WireRoutingMode> wireRoutingSelect = new Select<>();
     private final TextField componentSearch = new TextField();
     private final TextField analysisTstopField = new TextField();
     private final TextField analysisTstepField = new TextField();
@@ -103,8 +104,10 @@ public class MainLayout extends Div {
     private double transientTstep;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
+    private boolean suppressWireRoutingEvents;
     private boolean suppressNextCanvasClick;
     private DragState dragState;
+    private WorkspaceMockService.WireRoutingMode wireRoutingMode = WorkspaceMockService.WireRoutingMode.STRAIGHT;
 
     public MainLayout(
             WorkspaceMockService workspaceMockService,
@@ -167,6 +170,7 @@ public class MainLayout extends Div {
         configureSourceTypeSelect();
         configureSourceFrequencyField();
         configureNetNameField();
+        configureWireRoutingSelect();
         configureHistoryButtons();
         configureProjectButtons();
         configureFloatingWindows();
@@ -237,6 +241,17 @@ public class MainLayout extends Div {
         netNameField.setClearButtonVisible(true);
     }
 
+    private void configureWireRoutingSelect() {
+        wireRoutingSelect.setItems(WorkspaceMockService.WireRoutingMode.values());
+        wireRoutingSelect.setItemLabelGenerator(WorkspaceMockService.WireRoutingMode::label);
+        wireRoutingSelect.addClassName("wire-routing-select");
+        wireRoutingSelect.addValueChangeListener(event -> {
+            if (!suppressWireRoutingEvents && event.getValue() != null) {
+                setWireRoutingMode(event.getValue(), false, false);
+            }
+        });
+    }
+
     private void configureHistoryButtons() {
         undoButton.addClickListener(event -> undoWorkspaceChange());
         redoButton.addClickListener(event -> redoWorkspaceChange());
@@ -284,6 +299,7 @@ public class MainLayout extends Div {
         setAnalysis(ANALYSIS_TRANSIENT, true, true);
         setActiveTool(WorkspaceTool.SELECT, true);
         setActiveComponent(QuickComponent.RESISTOR, true);
+        setWireRoutingMode(WorkspaceMockService.WireRoutingMode.STRAIGHT, true, true);
         applyComponentFilter("");
         setZoom(DEFAULT_ZOOM, true);
         selectedElementId = workspaceMockService.firstElement(workspaceElements)
@@ -644,6 +660,7 @@ public class MainLayout extends Div {
                 new LinkedHashMap<>(workspaceWires),
                 new LinkedHashMap<>(netAliases),
                 analysisLabel,
+                wireRoutingMode,
                 transientTstop,
                 transientTstep,
                 selectedElementId,
@@ -689,6 +706,7 @@ public class MainLayout extends Div {
         netAliases.clear();
         netAliases.putAll(snapshot.netAliases());
         setAnalysis(snapshot.analysisLabel(), true, true);
+        setWireRoutingMode(snapshot.wireRoutingMode(), true, true);
         setTransientParameters(snapshot.transientTstop(), snapshot.transientTstep());
         selectedElementId = snapshot.selectedElementId();
         selectedWireId = snapshot.selectedWireId();
@@ -736,6 +754,7 @@ public class MainLayout extends Div {
                 new LinkedHashMap<>(workspaceWires),
                 new LinkedHashMap<>(netAliases),
                 analysisLabel,
+                wireRoutingMode,
                 transientTstop,
                 transientTstep,
                 activeComponent,
@@ -765,6 +784,7 @@ public class MainLayout extends Div {
         pendingWireEndpoint = null;
         clearSimulationState();
         setAnalysis(snapshot.analysisLabel(), true, true);
+        setWireRoutingMode(snapshot.wireRoutingMode(), true, true);
         setTransientParameters(snapshot.transientTstop(), snapshot.transientTstep());
         setActiveComponent(snapshot.activeComponent(), true);
         setActiveTool(WorkspaceTool.SELECT, true);
@@ -783,7 +803,7 @@ public class MainLayout extends Div {
     private void renderWorkspace() {
         schematicPreview.renderWorkspace(
                 workspaceElements.values(),
-                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()),
+                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode),
                 workspaceNetTopology.nets());
         schematicPreview.setSelectedElement(selectedElementId);
         schematicPreview.setDraggingElement(dragState == null ? null : dragState.elementId());
@@ -802,7 +822,7 @@ public class MainLayout extends Div {
                 return;
             }
 
-            workspaceMockService.describeWire(workspaceElements, workspaceNetTopology, wire).ifPresentOrElse(details -> {
+            workspaceMockService.describeWire(workspaceElements, workspaceNetTopology, wire, wireRoutingMode).ifPresentOrElse(details -> {
                 propertiesWindow.showWire(details);
                 resultsWindow.showWire(details, analysisLabel);
                 schematicPreview.setSelectedElement(null);
@@ -1233,7 +1253,7 @@ public class MainLayout extends Div {
         }
 
         try {
-            var resolvedWires = workspaceMockService.resolveWires(workspaceElements, workspaceWires.values());
+            var resolvedWires = workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode);
             CircuitSchematic schematic = workspaceExportService.exportSchematic(
                     PROJECT_FILE_NAME,
                     workspaceElements,
@@ -1350,6 +1370,32 @@ public class MainLayout extends Div {
 
         if (!silent) {
             statusMessageValue.setText("Aktywny komponent biblioteki: " + component.label() + ".");
+        }
+    }
+
+    private void setWireRoutingMode(
+            WorkspaceMockService.WireRoutingMode nextMode,
+            boolean silent,
+            boolean syncSelect) {
+        boolean changed = wireRoutingMode != nextMode;
+        wireRoutingMode = nextMode;
+
+        if (syncSelect) {
+            suppressWireRoutingEvents = true;
+            wireRoutingSelect.setValue(nextMode);
+            suppressWireRoutingEvents = false;
+        }
+
+        if (changed) {
+            renderWorkspace();
+            refreshSelectionPanels();
+            if (!silent) {
+                recordWorkspaceChange();
+            }
+        }
+
+        if (!silent) {
+            statusMessageValue.setText("Tryb prowadzenia przewodów ustawiono na: " + nextMode.label() + ".");
         }
     }
 
@@ -2218,6 +2264,7 @@ public class MainLayout extends Div {
         secondaryRow.add(separator());
         secondaryRow.add(buildToolbarGroup(
                 createLabel("Przewód"),
+                wireRoutingSelect,
                 selectedWireReadout,
                 wireEditModeReadout,
                 rewireStart,
@@ -2497,6 +2544,7 @@ public class MainLayout extends Div {
             LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
             LinkedHashMap<String, String> netAliases,
             String analysisLabel,
+            WorkspaceMockService.WireRoutingMode wireRoutingMode,
             double transientTstop,
             double transientTstep,
             String selectedElementId,
@@ -2513,6 +2561,7 @@ public class MainLayout extends Div {
             LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
             LinkedHashMap<String, String> netAliases,
             String analysisLabel,
+            WorkspaceMockService.WireRoutingMode wireRoutingMode,
             double transientTstop,
             double transientTstep,
             QuickComponent activeComponent,

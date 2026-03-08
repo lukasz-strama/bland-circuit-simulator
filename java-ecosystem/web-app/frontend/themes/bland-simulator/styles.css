@@ -236,6 +236,10 @@ vaadin-select.source-type-select {
   width: 112px;
 }
 
+vaadin-select.wire-routing-select {
+  width: 110px;
+}
+
 vaadin-text-field.source-frequency-field {
   width: 132px;
 }
