@@ -34,7 +34,7 @@ class Logger {
 } // namespace utils
 
 // ---------------------------------------------------------------------------
-// usage:  LOG_INFO("Server started on port {}", 8081);
+// usage:  LOG_INFO("Server started on port 8081");
 // ---------------------------------------------------------------------------
 
 #define LOG_DEBUG(msg)                                                         \

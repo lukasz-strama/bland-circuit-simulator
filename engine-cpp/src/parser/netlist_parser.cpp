@@ -1,6 +1,7 @@
 #include "parser/netlist_parser.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -74,6 +75,14 @@ core::Circuit parse_netlist(const std::string &raw) {
     while (std::getline(stream, line)) {
         if (line.empty())
             continue;
+
+        // Trim leading whitespace
+        auto first_non_space = line.find_first_not_of(" \t");
+        if (first_non_space == std::string::npos)
+            continue;
+        if (first_non_space != 0)
+            line = line.substr(first_non_space);
+
         if (line[0] == '*')
             continue;
         if (line[0] == '.')

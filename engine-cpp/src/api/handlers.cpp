@@ -1,5 +1,6 @@
 #include "api/handlers.hpp"
 
+#include <cctype>
 #include <iomanip>
 #include <sstream>
 
@@ -46,8 +47,13 @@ struct SimParams {
     double      tstep = 0.0001;
 };
 
-static SimParams extract_sim_params(const std::string &netlist) {
-    SimParams          params;
+struct ExtractResult {
+    SimParams params;
+    bool      found = false;
+};
+
+static ExtractResult extract_sim_params(const std::string &netlist) {
+    ExtractResult      result;
     std::istringstream stream(netlist);
     std::string        line;
 
@@ -61,6 +67,8 @@ static SimParams extract_sim_params(const std::string &netlist) {
         if (lower.rfind(".simulate", 0) != 0)
             continue;
 
+        result.found = true;
+
         std::istringstream tokens(line);
         std::string        token;
         while (tokens >> token) {
@@ -73,16 +81,20 @@ static SimParams extract_sim_params(const std::string &netlist) {
                 c = static_cast<char>(
                     std::tolower(static_cast<unsigned char>(c)));
 
-            if (key == "type")
-                params.type = val;
+            if (key == "type") {
+                for (auto &c : val)
+                    c = static_cast<char>(
+                        std::tolower(static_cast<unsigned char>(c)));
+                result.params.type = val;
+            }
             if (key == "tstop")
-                params.tstop = std::stod(val);
+                result.params.tstop = std::stod(val);
             if (key == "tstep")
-                params.tstep = std::stod(val);
+                result.params.tstep = std::stod(val);
         }
     }
 
-    return params;
+    return result;
 }
 
 crow::response handle_simulate(const crow::request &req) {
@@ -93,8 +105,14 @@ crow::response handle_simulate(const crow::request &req) {
             return crow::response(400, "Empty netlist");
         }
 
-        auto sim_params = extract_sim_params(netlist);
-        auto circuit    = parser::parse_netlist(netlist);
+        auto [sim_params, sim_found] = extract_sim_params(netlist);
+
+        if (!sim_found) {
+            return crow::response(400,
+                                  "Missing .SIMULATE directive in netlist");
+        }
+
+        auto circuit = parser::parse_netlist(netlist);
 
         core::SimulationResult result;
 

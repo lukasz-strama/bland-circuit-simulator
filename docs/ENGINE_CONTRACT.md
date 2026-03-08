@@ -82,29 +82,29 @@ Aby zmniejszyć narzut na serializację/deserializację, silnik zwraca wyniki ja
 ### 3.2. Struktura Kolumn
 1. Pierwsza kolumna to ZAWSZE `time` (w analizie DC będzie to jeden wiersz z `time=0`).
 2. Następne kolumny to napięcia na WSZYSTKICH węzłach w formacie `V(nazwa_wezla)`. Węzeł `0` jest pomijany.
-3. Ostatnie kolumny to prądy płynące przez źródła napięciowe w formacie `I(nazwa_zrodla)`. Wymaga tego metoda MNA.
+3. Ostatnie kolumny to prądy płynące przez WSZYSTKIE komponenty w formacie `I(nazwa_komponentu)`, w kolejności występowania w netliście. Obejmuje to rezystory, źródła napięciowe, źródła prądowe, cewki i kondensatory (w analizie transient).
 
 ### 3.3. Przykład prawidłowej odpowiedzi (HTTP 200 OK)
 
 - Odpowiedź dla Przykładu A
 ```csv
-time,V(IN),V(OUT),I(V1)
-0.000,5.000,2.500,-0.0025
+time,V(IN),V(OUT),I(V1),I(R1),I(R2)
+0.000,5.000,2.500,-0.0025,0.0025,0.0025
 ```
 
 - Odpowiedź dla Przykładu B
 ```csv
-time,V(IN),V(OUT),I(V1)
-0.000,5.000,0.000,-0.0050
-0.001,5.000,3.160,-0.0018
-0.002,5.000,4.323,-0.0006
-0.003,5.000,4.751,-0.0002
+time,V(IN),V(OUT),I(V1),I(R1),I(C1)
+0.000,5.000,0.000,-0.0050,0.0050,0.0050
+0.001,5.000,3.160,-0.0018,0.0018,0.0018
+0.002,5.000,4.323,-0.0006,0.0006,0.0006
+0.003,5.000,4.751,-0.0002,0.0002,0.0002
 ```
 
 - Odpowiedź dla Przykładu C
 ```csv
-time,V(OUT)
-0.000,10.000
+time,V(OUT),I(I1),I(R1)
+0.000,10.000,0.0200,0.0200
 ```
 
 ## 4. Kody Błędów (HTTP Response)
