@@ -347,6 +347,10 @@ vaadin-text-field.component-search {
   cursor: default;
 }
 
+.workspace-panel[data-tool="select"] .schematic-part {
+  cursor: grab;
+}
+
 .workspace-panel[data-tool="wire"] .workspace-viewport {
   cursor: crosshair;
 }
@@ -1107,9 +1111,24 @@ vaadin-select.trace-select {
   --component-stroke: #2d6aa1;
 }
 
+.schematic-part.is-dragging {
+  --component-stroke: #1d5b95;
+  cursor: grabbing;
+  z-index: 3;
+}
+
+.schematic-part.is-dragging .selection-halo {
+  opacity: 1;
+  border-color: rgba(29, 91, 149, 0.68);
+  background: rgba(29, 91, 149, 0.12);
+}
+
 .schematic-part.is-selected .component-label,
 .schematic-part.is-selected .component-value,
-.schematic-part.is-selected .component-marker {
+.schematic-part.is-selected .component-marker,
+.schematic-part.is-dragging .component-label,
+.schematic-part.is-dragging .component-value,
+.schematic-part.is-dragging .component-marker {
   color: #2d6aa1;
 }
 

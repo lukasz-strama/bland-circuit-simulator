@@ -37,6 +37,7 @@ public class MainLayout extends Div {
     private static final double MAX_ZOOM = 1.60;
     private static final double ZOOM_STEP = 0.08;
     private static final double MOVE_STEP = 16;
+    private static final double DRAG_THRESHOLD = 6;
 
     private final WorkspaceMockService workspaceMockService;
     private final BackendClient backendClient;
@@ -102,6 +103,8 @@ public class MainLayout extends Div {
     private double transientTstep;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
+    private boolean suppressNextCanvasClick;
+    private DragState dragState;
 
     public MainLayout(
             WorkspaceMockService workspaceMockService,
@@ -124,6 +127,21 @@ public class MainLayout extends Div {
             @Override
             public void onElementClick(String elementId) {
                 handleElementClick(elementId);
+            }
+
+            @Override
+            public void onElementDragStart(String elementId, double canvasX, double canvasY) {
+                handleElementDragStart(elementId, canvasX / zoom, canvasY / zoom);
+            }
+
+            @Override
+            public void onElementDrag(String elementId, double canvasX, double canvasY) {
+                handleElementDrag(elementId, canvasX / zoom, canvasY / zoom);
+            }
+
+            @Override
+            public void onElementDragEnd(String elementId, double canvasX, double canvasY) {
+                handleElementDragEnd(elementId, canvasX / zoom, canvasY / zoom);
             }
 
             @Override
@@ -251,6 +269,8 @@ public class MainLayout extends Div {
         workspaceWires.clear();
         workspaceWires.putAll(workspaceMockService.createInitialWires());
         netAliases.clear();
+        dragState = null;
+        suppressNextCanvasClick = false;
         selectedWireId = null;
         selectedNetKey = null;
         pendingWireStart = null;
@@ -276,6 +296,11 @@ public class MainLayout extends Div {
     }
 
     private void handleCanvasClick(double canvasX, double canvasY) {
+        if (suppressNextCanvasClick) {
+            suppressNextCanvasClick = false;
+            return;
+        }
+
         if (activeTool.isPlacementTool()) {
             addElementAt(activeTool.elementType(), canvasX, canvasY);
             return;
@@ -381,6 +406,63 @@ public class MainLayout extends Div {
         refreshWorkspaceState();
         recordWorkspaceChange();
         statusMessageValue.setText("Przesunięto " + selectedElementId + " " + directionLabel + ".");
+    }
+
+    private void handleElementDragStart(String elementId, double canvasX, double canvasY) {
+        if (activeTool != WorkspaceTool.SELECT) {
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(elementId);
+        if (element == null) {
+            return;
+        }
+
+        showSelection(elementId);
+        dragState = new DragState(elementId, element, canvasX, canvasY, false);
+        suppressNextCanvasClick = false;
+        renderWorkspace();
+    }
+
+    private void handleElementDrag(String elementId, double canvasX, double canvasY) {
+        if (dragState == null || activeTool != WorkspaceTool.SELECT || !dragState.elementId().equals(elementId)) {
+            return;
+        }
+
+        double deltaX = canvasX - dragState.startCanvasX();
+        double deltaY = canvasY - dragState.startCanvasY();
+        if (!dragState.moved() && Math.hypot(deltaX, deltaY) < DRAG_THRESHOLD) {
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement movedElement =
+                workspaceMockService.moveElement(dragState.originalElement(), deltaX, deltaY);
+        workspaceElements.put(elementId, movedElement);
+        dragState = new DragState(elementId, dragState.originalElement(), dragState.startCanvasX(), dragState.startCanvasY(), true);
+        refreshWorkspaceState();
+        statusMessageValue.setText("Przeciąganie elementu " + elementId + " po siatce arkusza.");
+    }
+
+    private void handleElementDragEnd(String elementId, double canvasX, double canvasY) {
+        if (dragState == null || !dragState.elementId().equals(elementId)) {
+            return;
+        }
+
+        handleElementDrag(elementId, canvasX, canvasY);
+        WorkspaceMockService.WorkspaceElement currentElement = workspaceElements.get(elementId);
+        WorkspaceMockService.WorkspaceElement originalElement = dragState.originalElement();
+        boolean positionChanged = currentElement != null
+                && (Math.abs(currentElement.left() - originalElement.left()) > 0.01
+                || Math.abs(currentElement.top() - originalElement.top()) > 0.01);
+
+        dragState = null;
+        schematicPreview.setDraggingElement(null);
+
+        if (positionChanged) {
+            recordWorkspaceChange();
+            suppressNextCanvasClick = true;
+            statusMessageValue.setText("Przesunięto " + elementId + " przeciągnięciem.");
+        }
     }
 
     private void showSelection(String elementId) {
@@ -593,6 +675,8 @@ public class MainLayout extends Div {
         selectedElementId = snapshot.selectedElementId();
         selectedWireId = snapshot.selectedWireId();
         selectedNetKey = snapshot.selectedNetKey();
+        dragState = null;
+        suppressNextCanvasClick = false;
         pendingWireStart = null;
         pendingWireEndpoint = null;
         clearSimulationState();
@@ -657,6 +741,8 @@ public class MainLayout extends Div {
         selectedElementId = snapshot.selectedElementId();
         selectedWireId = snapshot.selectedWireId();
         selectedNetKey = snapshot.selectedNetKey();
+        dragState = null;
+        suppressNextCanvasClick = false;
         pendingWireStart = null;
         pendingWireEndpoint = null;
         clearSimulationState();
@@ -682,6 +768,7 @@ public class MainLayout extends Div {
                 workspaceMockService.resolveWires(workspaceElements, workspaceWires.values()),
                 workspaceNetTopology.nets());
         schematicPreview.setSelectedElement(selectedElementId);
+        schematicPreview.setDraggingElement(dragState == null ? null : dragState.elementId());
         schematicPreview.setSelectedWire(selectedWireId);
         schematicPreview.setSelectedNet(selectedNetKey);
         schematicPreview.setPendingWireStart(pendingWireStart);
@@ -1212,6 +1299,11 @@ public class MainLayout extends Div {
     }
 
     private void setActiveTool(WorkspaceTool tool, boolean silent) {
+        if (tool != WorkspaceTool.SELECT && dragState != null) {
+            dragState = null;
+            suppressNextCanvasClick = false;
+            schematicPreview.setDraggingElement(null);
+        }
         if (tool != WorkspaceTool.WIRE) {
             clearPendingWire();
         }
@@ -2368,6 +2460,14 @@ public class MainLayout extends Div {
             String rmsOrAverage,
             String timeOfPeak,
             String summaryNote) {
+    }
+
+    private record DragState(
+            String elementId,
+            WorkspaceMockService.WorkspaceElement originalElement,
+            double startCanvasX,
+            double startCanvasY,
+            boolean moved) {
     }
 
     private record WorkspaceSnapshot(

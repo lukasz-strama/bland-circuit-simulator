@@ -11,6 +11,8 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 public final class SchematicPreview extends Div {
+    private static final String POINTER_ELEMENT_DATA =
+            "event.target.closest('[data-element-id]') ? event.target.closest('[data-element-id]').dataset.elementId : ''";
     private static final String CLICKED_PIN_KEY_DATA =
             "event.target.closest('[data-pin-key]') ? event.target.closest('[data-pin-key]').dataset.pinKey : ''";
     private static final String CLICKED_NET_KEY_DATA =
@@ -19,14 +21,15 @@ public final class SchematicPreview extends Div {
             "event.target.closest('[data-wire-id]') ? event.target.closest('[data-wire-id]').dataset.wireId : ''";
     private static final String CLICKED_ELEMENT_DATA =
             "event.target.closest('[data-element-id]') ? event.target.closest('[data-element-id]').dataset.elementId : ''";
-    private static final String CANVAS_X_DATA = "event.offsetX";
-    private static final String CANVAS_Y_DATA = "event.offsetY";
+    private static final String CANVAS_X_DATA = "event.clientX - event.currentTarget.getBoundingClientRect().left";
+    private static final String CANVAS_Y_DATA = "event.clientY - event.currentTarget.getBoundingClientRect().top";
 
     private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
     private final Map<String, Div> selectableWires = new LinkedHashMap<>();
     private final Map<String, Div> selectablePins = new LinkedHashMap<>();
     private final Map<String, Span> selectableNets = new LinkedHashMap<>();
+    private String draggedElementId;
 
     public SchematicPreview(InteractionHandler interactionHandler) {
         addClassName("sheet-stage");
@@ -102,6 +105,17 @@ public final class SchematicPreview extends Div {
         }
     }
 
+    public void setDraggingElement(String elementId) {
+        selectableParts.values().forEach(part -> part.removeClassName("is-dragging"));
+        if (elementId == null) {
+            return;
+        }
+        Div draggedPart = selectableParts.get(elementId);
+        if (draggedPart != null) {
+            draggedPart.addClassName("is-dragging");
+        }
+    }
+
     private Component createSheetNote() {
         Div note = new Div();
         note.addClassName("sheet-note");
@@ -123,7 +137,57 @@ public final class SchematicPreview extends Div {
                 .addEventData(CLICKED_ELEMENT_DATA)
                 .addEventData(CANVAS_X_DATA)
                 .addEventData(CANVAS_Y_DATA);
+        canvas.getElement()
+                .addEventListener("pointerdown", event -> handlePointerDown(event, interactionHandler))
+                .addEventData(POINTER_ELEMENT_DATA)
+                .addEventData(CANVAS_X_DATA)
+                .addEventData(CANVAS_Y_DATA);
+        canvas.getElement()
+                .addEventListener("pointermove", event -> handlePointerMove(event, interactionHandler))
+                .addEventData(CANVAS_X_DATA)
+                .addEventData(CANVAS_Y_DATA);
+        canvas.getElement()
+                .addEventListener("pointerup", event -> handlePointerRelease(event, interactionHandler))
+                .addEventData(CANVAS_X_DATA)
+                .addEventData(CANVAS_Y_DATA);
+        canvas.getElement()
+                .addEventListener("pointerleave", event -> handlePointerRelease(event, interactionHandler))
+                .addEventData(CANVAS_X_DATA)
+                .addEventData(CANVAS_Y_DATA);
         return canvas;
+    }
+
+    private void handlePointerDown(DomEvent event, InteractionHandler interactionHandler) {
+        String elementId = event.getEventData().getString(POINTER_ELEMENT_DATA);
+        if (elementId == null || elementId.isBlank()) {
+            return;
+        }
+        draggedElementId = elementId;
+        interactionHandler.onElementDragStart(
+                elementId,
+                event.getEventData().getNumber(CANVAS_X_DATA),
+                event.getEventData().getNumber(CANVAS_Y_DATA));
+    }
+
+    private void handlePointerMove(DomEvent event, InteractionHandler interactionHandler) {
+        if (draggedElementId == null) {
+            return;
+        }
+        interactionHandler.onElementDrag(
+                draggedElementId,
+                event.getEventData().getNumber(CANVAS_X_DATA),
+                event.getEventData().getNumber(CANVAS_Y_DATA));
+    }
+
+    private void handlePointerRelease(DomEvent event, InteractionHandler interactionHandler) {
+        if (draggedElementId == null) {
+            return;
+        }
+        interactionHandler.onElementDragEnd(
+                draggedElementId,
+                event.getEventData().getNumber(CANVAS_X_DATA),
+                event.getEventData().getNumber(CANVAS_Y_DATA));
+        draggedElementId = null;
     }
 
     private void handleCanvasClick(DomEvent event, InteractionHandler interactionHandler) {
@@ -474,6 +538,12 @@ public final class SchematicPreview extends Div {
         void onCanvasClick(double canvasX, double canvasY);
 
         void onElementClick(String elementId);
+
+        void onElementDragStart(String elementId, double canvasX, double canvasY);
+
+        void onElementDrag(String elementId, double canvasX, double canvasY);
+
+        void onElementDragEnd(String elementId, double canvasX, double canvasY);
 
         void onPinClick(String elementId, String pinKey);
 
