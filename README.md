@@ -1,4 +1,7 @@
-GUI: ([Figma](https://www.figma.com/design/NHJp5kacai7WlVIpCGsPPR/BlandDesign?node-id=0-1&m=dev&t=h9QZ9eInxaQkzupD-1))
+**GUI:** ([Figma](https://www.figma.com/design/NHJp5kacai7WlVIpCGsPPR/BlandDesign?node-id=0-1&m=dev&t=h9QZ9eInxaQkzupD-1))
+
+**URL (POST):** `https://bland-circuit-engine.onrender.com/api/v1/simulate`
+> *(ze względu na darmowy plan, pierwsze zapytanie po dłuższej nieaktywności może zająć kilkanaście sekund).*
 
 ---
 
