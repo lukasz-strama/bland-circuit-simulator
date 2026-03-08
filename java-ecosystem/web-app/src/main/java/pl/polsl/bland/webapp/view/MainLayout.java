@@ -2,6 +2,7 @@ package pl.polsl.bland.webapp.view;
 
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.html.Div;
+import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
@@ -48,6 +49,7 @@ public class MainLayout extends Div {
     private final LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> workspaceWires = new LinkedHashMap<>();
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createWideReadout("");
+    private final Span analysisConfigReadout = createWideReadout("");
     private final Span undoButton = createAction("Cofnij", "tool-button");
     private final Span redoButton = createAction("Ponów", "tool-button");
     private final Span loadProjectButton = createAction("Wczytaj", "tool-button");
@@ -64,6 +66,10 @@ public class MainLayout extends Div {
     private final Span statusToolValue = new Span();
     private final Span statusAnalysisValue = new Span();
     private final Span statusZoomValue = new Span();
+    private final Div simulationSettingsWindow = new Div();
+    private final Span simulationSettingsCaption = new Span();
+    private final Div simulationSettingsHint = new Div();
+    private final Pre simulationDirectivePreview = new Pre();
     private final Select<String> analysisSelect = new Select<>();
     private final Select<String> sourceTypeSelect = new Select<>();
     private final TextField componentSearch = new TextField();
@@ -146,6 +152,7 @@ public class MainLayout extends Div {
         configureHistoryButtons();
         configureProjectButtons();
         configureFloatingWindows();
+        configureSimulationSettingsWindow();
 
         addClassName("main-view");
         setSizeFull();
@@ -231,6 +238,13 @@ public class MainLayout extends Div {
         resultsWindow.setCloseHandler(() -> toggleResultsWindow(false));
     }
 
+    private void configureSimulationSettingsWindow() {
+        simulationSettingsWindow.addClassNames("floating-window", "is-simulation-window");
+        simulationSettingsWindow.setVisible(false);
+        simulationSettingsWindow.add(buildSimulationSettingsTitleBar(), buildSimulationSettingsBody());
+        analysisConfigReadout.addClassName("is-analysis-summary");
+    }
+
     private void resetWorkspace() {
         workspaceElements.clear();
         workspaceElements.putAll(workspaceMockService.createInitialWorkspace());
@@ -244,6 +258,7 @@ public class MainLayout extends Div {
         clearSimulationState();
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
+        simulationSettingsWindow.setVisible(false);
         componentSearch.clear();
         resetTransientParameters(true);
         setAnalysis(ANALYSIS_TRANSIENT, true, true);
@@ -535,6 +550,7 @@ public class MainLayout extends Div {
                 selectedWireId,
                 selectedNetKey,
                 simulationReady,
+                simulationSettingsWindow.isVisible(),
                 resultsWindow.isVisible(),
                 propertiesWindow.isVisible());
     }
@@ -582,6 +598,7 @@ public class MainLayout extends Div {
         clearSimulationState();
         propertiesWindow.setVisible(snapshot.propertiesVisible());
         resultsWindow.setVisible(snapshot.resultsVisible());
+        simulationSettingsWindow.setVisible(snapshot.simulationSettingsVisible());
         refreshWorkspaceState();
         updateSimulationIndicators();
     }
@@ -624,6 +641,7 @@ public class MainLayout extends Div {
                 selectedWireId,
                 selectedNetKey,
                 simulationReady,
+                simulationSettingsWindow.isVisible(),
                 resultsWindow.isVisible(),
                 propertiesWindow.isVisible(),
                 zoom);
@@ -649,6 +667,7 @@ public class MainLayout extends Div {
         setZoom(snapshot.zoom(), true);
         propertiesWindow.setVisible(snapshot.propertiesVisible());
         resultsWindow.setVisible(snapshot.resultsVisible());
+        simulationSettingsWindow.setVisible(snapshot.simulationSettingsVisible());
         refreshWorkspaceState();
         updateSimulationIndicators();
     }
@@ -1178,7 +1197,7 @@ public class MainLayout extends Div {
             suppressAnalysisEvents = false;
         }
 
-        syncTransientControls();
+        syncAnalysisControls();
         statusAnalysisValue.setText(nextAnalysis);
         refreshSelectionPanels();
         updateSimulationIndicators();
@@ -1265,6 +1284,19 @@ public class MainLayout extends Div {
         statusMessageValue.setText("Widok dopasowano do arkusza.");
     }
 
+    private void setSimulationSettingsWindowVisible(boolean visible, boolean announce) {
+        simulationSettingsWindow.setVisible(visible);
+        if (!announce) {
+            return;
+        }
+
+        if (visible) {
+            statusMessageValue.setText("Otwarto okno ustawień symulacji.");
+        } else {
+            statusMessageValue.setText("Ukryto okno ustawień symulacji.");
+        }
+    }
+
     private void updateSimulationIndicators() {
         simulationBadgeDot.removeClassNames("is-idle", "is-done");
         if (simulationReady) {
@@ -1333,10 +1365,10 @@ public class MainLayout extends Div {
     private void setTransientParameters(double tstop, double tstep) {
         transientTstop = tstop;
         transientTstep = tstep;
-        syncTransientControls();
+        syncAnalysisControls();
     }
 
-    private void syncTransientControls() {
+    private void syncAnalysisControls() {
         boolean enabled = resolveAnalysisType() == SimulationRequest.AnalysisType.TRANSIENT;
         analysisTstopField.setEnabled(enabled);
         analysisTstepField.setEnabled(enabled);
@@ -1350,6 +1382,13 @@ public class MainLayout extends Div {
         if (!tstepValue.equals(analysisTstepField.getValue())) {
             analysisTstepField.setValue(tstepValue);
         }
+
+        analysisConfigReadout.setText(buildAnalysisSummary());
+        simulationSettingsCaption.setText(enabled ? "Analiza transient przygotowana do wysłania." : "Analiza punktu pracy bez parametrów czasowych.");
+        simulationSettingsHint.setText(enabled
+                ? "Ustaw parametry tstop i tstep, aby frontend był gotowy na docelowy request transient do backendu."
+                : "Tryb DC nie wysyła parametrów czasowych. Panel pokazuje uproszczony request punktu pracy.");
+        simulationDirectivePreview.setText(buildAnalysisDirectivePreview());
     }
 
     private double parsePositiveAnalysisParameter(String rawValue, String label) {
@@ -1369,6 +1408,27 @@ public class MainLayout extends Div {
             throw new IllegalArgumentException("Parametr " + label + " musi być większy od zera.");
         }
         return parsed;
+    }
+
+    private String buildAnalysisSummary() {
+        if (resolveAnalysisType() == SimulationRequest.AnalysisType.DC) {
+            return "DC | bez parametrów transientu";
+        }
+        return "TRAN | tstop="
+                + formatAnalysisParameter(transientTstop)
+                + " s | tstep="
+                + formatAnalysisParameter(transientTstep)
+                + " s";
+    }
+
+    private String buildAnalysisDirectivePreview() {
+        if (resolveAnalysisType() == SimulationRequest.AnalysisType.DC) {
+            return ".SIMULATE type=dc";
+        }
+        return ".SIMULATE type=transient tstop="
+                + formatAnalysisParameter(transientTstop)
+                + " tstep="
+                + formatAnalysisParameter(transientTstep);
     }
 
     private void applySelectedElementValue() {
@@ -1860,6 +1920,67 @@ public class MainLayout extends Div {
         return group;
     }
 
+    private Component buildSimulationSettingsTitleBar() {
+        Div titleBar = new Div();
+        titleBar.addClassName("window-titlebar");
+
+        Div textGroup = new Div();
+        Span title = new Span("Ustawienia symulacji");
+        title.addClassName("window-title");
+        simulationSettingsCaption.addClassName("window-caption");
+        textGroup.add(title, simulationSettingsCaption);
+
+        Span closeButton = new Span("x");
+        closeButton.addClassName("window-close");
+        closeButton.addClickListener(event -> setSimulationSettingsWindowVisible(false, true));
+
+        titleBar.add(textGroup, closeButton);
+        return titleBar;
+    }
+
+    private Component buildSimulationSettingsBody() {
+        Div body = new Div();
+        body.addClassNames("window-body", "simulation-settings-body");
+        body.add(buildSimulationSettingsFormBlock(), buildSimulationSettingsPreviewBlock());
+        return body;
+    }
+
+    private Component buildSimulationSettingsFormBlock() {
+        Span applyTransientButton = createAction("Ustaw", "mini-button");
+        applyTransientButton.addClickListener(event -> applyTransientParameters());
+
+        Span resetTransientButton = createAction("Auto", "mini-button");
+        resetTransientButton.addClickListener(event -> resetTransientParameters(false));
+
+        Div formGrid = new Div();
+        formGrid.addClassName("settings-grid");
+        formGrid.add(
+                createPropertyLabel("Tryb"),
+                analysisSelect,
+                createPropertyLabel("tstop [s]"),
+                analysisTstopField,
+                createPropertyLabel("tstep [s]"),
+                analysisTstepField);
+
+        Div actionRow = new Div();
+        actionRow.addClassName("settings-action-row");
+        actionRow.add(applyTransientButton, resetTransientButton);
+
+        Div block = new Div();
+        block.addClassName("panel-block");
+        block.add(createSectionTitle("Parametry requestu"), formGrid, actionRow);
+        return block;
+    }
+
+    private Component buildSimulationSettingsPreviewBlock() {
+        Div block = new Div();
+        block.addClassName("panel-block");
+        simulationSettingsHint.addClassNames("hint-box", "simulation-settings-hint");
+        simulationDirectivePreview.addClassNames("netlist-box", "directive-preview");
+        block.add(createSectionTitle("Podgląd"), simulationSettingsHint, simulationDirectivePreview);
+        return block;
+    }
+
     private Div buildToolbar() {
         Div toolbar = new Div();
         toolbar.addClassName("toolbar");
@@ -1878,11 +1999,9 @@ public class MainLayout extends Div {
         Span showResults = createAction("Pokaż wyniki", "tool-button");
         showResults.addClickListener(event -> toggleResultsWindow(true));
 
-        Span applyTransientButton = createAction("Ustaw", "mini-button");
-        applyTransientButton.addClickListener(event -> applyTransientParameters());
-
-        Span resetTransientButton = createAction("Auto", "mini-button");
-        resetTransientButton.addClickListener(event -> resetTransientParameters(false));
+        Span simulationSettingsButton = createAction("Ustawienia", "tool-button");
+        simulationSettingsButton.addClickListener(
+                event -> setSimulationSettingsWindowVisible(!simulationSettingsWindow.isVisible(), true));
 
         Span renameNet = createAction("Nazwij", "mini-button");
         renameNet.addClickListener(event -> applySelectedNetName());
@@ -1958,11 +2077,8 @@ public class MainLayout extends Div {
         primaryRow.add(separator());
         primaryRow.add(buildToolbarGroup(
                 createLabel("Analiza"),
-                analysisSelect,
-                analysisTstopField,
-                analysisTstepField,
-                applyTransientButton,
-                resetTransientButton));
+                analysisConfigReadout,
+                simulationSettingsButton));
 
         primaryRow.add(separator());
         primaryRow.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
@@ -2076,7 +2192,7 @@ public class MainLayout extends Div {
         workspaceViewport.addClassName("workspace-viewport");
         workspaceViewport.add(schematicPreview);
 
-        workspacePanel.add(workspaceViewport, propertiesWindow, resultsWindow);
+        workspacePanel.add(workspaceViewport, propertiesWindow, resultsWindow, simulationSettingsWindow);
         return workspacePanel;
     }
 
@@ -2167,6 +2283,18 @@ public class MainLayout extends Div {
         return label;
     }
 
+    private Span createSectionTitle(String text) {
+        Span title = new Span(text);
+        title.addClassName("section-title");
+        return title;
+    }
+
+    private Span createPropertyLabel(String text) {
+        Span label = new Span(text);
+        label.addClassName("property-label");
+        return label;
+    }
+
     private Span createReadout(String text) {
         Span readout = new Span(text);
         readout.addClassName("toolbar-readout");
@@ -2253,6 +2381,7 @@ public class MainLayout extends Div {
             String selectedWireId,
             String selectedNetKey,
             boolean simulationReady,
+            boolean simulationSettingsVisible,
             boolean resultsVisible,
             boolean propertiesVisible) {
     }
@@ -2269,6 +2398,7 @@ public class MainLayout extends Div {
             String selectedWireId,
             String selectedNetKey,
             boolean simulationReady,
+            boolean simulationSettingsVisible,
             boolean resultsVisible,
             boolean propertiesVisible,
             double zoom) {

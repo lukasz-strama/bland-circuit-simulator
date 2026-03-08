@@ -215,6 +215,10 @@ body {
   text-overflow: ellipsis;
 }
 
+.toolbar-readout.is-analysis-summary {
+  max-width: 320px;
+}
+
 vaadin-select.toolbar-select {
   width: 176px;
 }
@@ -433,6 +437,14 @@ vaadin-text-field.component-search {
   z-index: 14;
 }
 
+.floating-window.is-simulation-window {
+  top: 346px;
+  right: 22px;
+  width: 314px;
+  max-height: calc(100% - 368px);
+  z-index: 13;
+}
+
 .window-titlebar {
   display: flex;
   align-items: center;
@@ -482,6 +494,12 @@ vaadin-text-field.component-search {
   padding: 10px;
 }
 
+.simulation-settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
 .results-window-body {
   display: flex;
   flex: 1;
@@ -514,6 +532,25 @@ vaadin-text-field.component-search {
   margin: 0;
 }
 
+.settings-grid {
+  display: grid;
+  grid-template-columns: 92px minmax(0, 1fr);
+  gap: 8px 10px;
+  align-items: center;
+}
+
+.settings-grid vaadin-select.toolbar-select,
+.settings-grid vaadin-text-field.analysis-parameter-field {
+  width: 100%;
+}
+
+.settings-action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+
 .property-grid > span:nth-child(odd),
 .simulation-data > span:nth-child(odd) {
   color: var(--text-dim);
@@ -539,6 +576,11 @@ vaadin-text-field.component-search {
   border: 1px dashed #b8c3d1;
   color: var(--text-soft);
   background: rgba(255, 255, 255, 0.42);
+}
+
+.directive-preview {
+  margin: 0;
+  white-space: pre-wrap;
 }
 
 .tab-bar {
