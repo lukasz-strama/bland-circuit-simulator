@@ -196,6 +196,7 @@ public final class SchematicPreview extends Div {
             case INDUCTOR -> createInductor(element);
             case CAPACITOR -> createCapacitor(element);
             case VOLTAGE -> createVoltageSource(element);
+            case CURRENT -> createCurrentSource(element);
             case GROUND -> createGround(element);
             case DIODE -> createDiode(element);
             case OPAMP -> createOpAmp(element);
@@ -272,7 +273,26 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "POS", 74, 46),
                 pin(element.id(), "NEG", 74, 326),
                 text("component-label", 42, 4, element.id()),
-                text("component-value", 0, 280, element.value()));
+                text("component-value", 12, 280, element.value() + " V"),
+                text("component-value is-secondary", 26, 300, sourceModeLabel(element)));
+        return part;
+    }
+
+    private Component createCurrentSource(WorkspaceMockService.WorkspaceElement element) {
+        Div part = part(element);
+        part.add(
+                halo(22, 0, 104, 272),
+                line("component-line", 74, 46, 74, 92),
+                circle("component-circle", 34, 92, 80),
+                line("component-line", 74, 122, 74, 194),
+                line("component-line", 74, 194, 64, 180),
+                line("component-line", 74, 194, 84, 180),
+                line("component-line", 74, 172, 74, 326),
+                pin(element.id(), "POS", 74, 46),
+                pin(element.id(), "NEG", 74, 326),
+                text("component-label", 42, 4, element.id()),
+                text("component-value", 10, 280, formatCurrentValue(element)),
+                text("component-value is-secondary", 26, 300, sourceModeLabel(element)));
         return part;
     }
 
@@ -436,6 +456,18 @@ public final class SchematicPreview extends Div {
 
     private static String pinToken(String elementId, String pinKey) {
         return elementId + ":" + pinKey;
+    }
+
+    private static String sourceModeLabel(WorkspaceMockService.WorkspaceElement element) {
+        String sourceType = WorkspaceMockService.formatSourceTypeLabel(element.sourceType());
+        if (!WorkspaceMockService.SOURCE_TYPE_SINE.equals(WorkspaceMockService.normalizeSourceType(element.sourceType()))) {
+            return sourceType;
+        }
+        return sourceType + " / " + WorkspaceMockService.formatFrequencyLabel(element.frequency());
+    }
+
+    private static String formatCurrentValue(WorkspaceMockService.WorkspaceElement element) {
+        return element.value() + " A";
     }
 
     public interface InteractionHandler {

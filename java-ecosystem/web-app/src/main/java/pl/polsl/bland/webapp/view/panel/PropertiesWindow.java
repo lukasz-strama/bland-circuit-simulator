@@ -11,6 +11,8 @@ public final class PropertiesWindow extends Div {
     private final Span propId = new Span();
     private final Span propType = new Span();
     private final Span propValue = new Span();
+    private final Span propSourceType = new Span();
+    private final Span propFrequency = new Span();
     private final Span propNodeA = new Span();
     private final Span propNodeB = new Span();
     private final Span propOrientation = new Span();
@@ -36,6 +38,8 @@ public final class PropertiesWindow extends Div {
         propId.setText("-");
         propType.setText("-");
         propValue.setText("-");
+        propSourceType.setText("-");
+        propFrequency.setText("-");
         propNodeA.setText("-");
         propNodeB.setText("-");
         propOrientation.setText("-");
@@ -56,6 +60,8 @@ public final class PropertiesWindow extends Div {
         propId.setText(details.id());
         propType.setText(details.typeLabel());
         propValue.setText(details.value());
+        propSourceType.setText(details.sourceType());
+        propFrequency.setText(details.frequency());
         propNodeA.setText(details.nodeA());
         propNodeB.setText(details.nodeB());
         propOrientation.setText(details.orientation());
@@ -76,6 +82,8 @@ public final class PropertiesWindow extends Div {
         propId.setText(details.id());
         propType.setText("Przewód");
         propValue.setText(details.startPin() + " -> " + details.endPin());
+        propSourceType.setText("-");
+        propFrequency.setText("-");
         propNodeA.setText(details.startNet());
         propNodeB.setText(details.endNet());
         propOrientation.setText(details.geometry());
@@ -147,6 +155,8 @@ public final class PropertiesWindow extends Div {
                 propertyLabel("ID elementu"), propId,
                 propertyLabel("Typ"), propType,
                 propertyLabel("Wartość"), propValue,
+                propertyLabel("Tryb źródła"), propSourceType,
+                propertyLabel("Częstotliwość"), propFrequency,
                 propertyLabel("Węzeł A"), propNodeA,
                 propertyLabel("Węzeł B"), propNodeB,
                 propertyLabel("Orientacja"), propOrientation,

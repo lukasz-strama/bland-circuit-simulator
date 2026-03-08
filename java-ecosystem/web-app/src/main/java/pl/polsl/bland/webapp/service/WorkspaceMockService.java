@@ -23,6 +23,8 @@ public class WorkspaceMockService {
     private static final double GRID_RIGHT = 1244;
     private static final double GRID_BOTTOM = 806;
     private static final double GRID_STEP = 16;
+    public static final String SOURCE_TYPE_DC = "dc";
+    public static final String SOURCE_TYPE_SINE = "sine";
 
     private final Map<ElementType, ElementTemplate> templates = new EnumMap<>(ElementType.class);
 
@@ -121,7 +123,7 @@ public class WorkspaceMockService {
         templates.put(ElementType.VOLTAGE, new ElementTemplate(
                 "V",
                 "Źródło napięcia",
-                "SIN(0 5 1k)",
+                "5.0",
                 "IN",
                 "0",
                 "Pionowo",
@@ -147,6 +149,35 @@ public class WorkspaceMockService {
                         "Wybrano element %s.",
                         "Ślad aktywny: I(%s).",
                         "Integracja z backendem później zastąpi te wartości rzeczywistym przebiegiem.")));
+
+        templates.put(ElementType.CURRENT, new ElementTemplate(
+                "I",
+                "Źródło prądu",
+                "0.02",
+                "IN",
+                "OUT",
+                "Pionowo",
+                "Źródło prądowe wymuszające przepływ prądu od pinu dodatniego do ujemnego.",
+                "V(%s)",
+                "10,0 V",
+                "0,0 V",
+                "5,8 V",
+                "0,00 ms",
+                "Źródło prądowe wymusza zadany prąd, więc odpowiedź napięciowa zależy od obciążenia i topologii połączeń.",
+                List.of(
+                        new ResultRow("0,00 ms", "10,00 V", "20,0 mA", "Stan ustalony DC"),
+                        new ResultRow("1,00 ms", "10,00 V", "20,0 mA", "Brak zmian"),
+                        new ResultRow("4,00 ms", "10,00 V", "20,0 mA", "Prąd wymuszony")),
+                """
+                        * Netlista źródła prądowego
+                        %s IN OUT type=dc val=0.02
+                        R1 OUT 0 500
+                        .probe V(OUT)
+                        """,
+                List.of(
+                        "Wybrano element %s.",
+                        "Ślad aktywny: V(OUT).",
+                        "Model źródła prądowego jest obecnie mockowany po stronie frontendu.")));
 
         templates.put(ElementType.GROUND, new ElementTemplate(
                 "0",
@@ -258,7 +289,15 @@ public class WorkspaceMockService {
         String nextId = buildElementId(type, nextSequence);
         double left = clamp(snap(canvasX - type.width() / 2), GRID_LEFT, GRID_RIGHT - type.width());
         double top = clamp(snap(canvasY - type.height() / 2), GRID_TOP, GRID_BOTTOM - type.height());
-        return new WorkspaceElement(nextId, type, left, top, defaultValue(type));
+        String sourceType = defaultSourceType(type);
+        return new WorkspaceElement(
+                nextId,
+                type,
+                left,
+                top,
+                defaultValue(type),
+                sourceType,
+                defaultFrequency(type, sourceType));
     }
 
     public Optional<WorkspaceWire> createWire(
@@ -307,16 +346,97 @@ public class WorkspaceMockService {
     public WorkspaceElement moveElement(WorkspaceElement element, double deltaX, double deltaY) {
         double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().width());
         double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().height());
-        return new WorkspaceElement(element.id(), element.type(), left, top, element.value());
+        return new WorkspaceElement(
+                element.id(),
+                element.type(),
+                left,
+                top,
+                element.value(),
+                element.sourceType(),
+                element.frequency());
     }
 
     public WorkspaceElement updateElementValue(WorkspaceElement element, String value) {
-        return new WorkspaceElement(element.id(), element.type(), element.left(), element.top(), normalizeValue(element.type(), value));
+        return new WorkspaceElement(
+                element.id(),
+                element.type(),
+                element.left(),
+                element.top(),
+                normalizeValue(element.type(), value),
+                element.sourceType(),
+                element.frequency());
     }
 
     public String defaultValue(ElementType type) {
         ElementTemplate template = templates.get(type);
         return template == null ? "" : template.defaultValue();
+    }
+
+    public WorkspaceElement updateSourceType(WorkspaceElement element, String sourceType) {
+        if (!element.isSource()) {
+            return element;
+        }
+
+        String normalizedType = normalizeSourceType(sourceType);
+        Double frequency = SOURCE_TYPE_SINE.equals(normalizedType)
+                ? normalizeFrequencyValue(element.type(), element.frequency(), true)
+                : null;
+        return new WorkspaceElement(
+                element.id(),
+                element.type(),
+                element.left(),
+                element.top(),
+                element.value(),
+                normalizedType,
+                frequency);
+    }
+
+    public WorkspaceElement updateSourceFrequency(WorkspaceElement element, Double frequency) {
+        if (!element.isSource()) {
+            return element;
+        }
+
+        String normalizedType = normalizeSourceType(element.sourceType());
+        return new WorkspaceElement(
+                element.id(),
+                element.type(),
+                element.left(),
+                element.top(),
+                element.value(),
+                normalizedType,
+                SOURCE_TYPE_SINE.equals(normalizedType)
+                        ? normalizeFrequencyValue(element.type(), frequency, true)
+                        : null);
+    }
+
+    public String defaultSourceType(ElementType type) {
+        return switch (type) {
+            case VOLTAGE -> SOURCE_TYPE_SINE;
+            case CURRENT -> SOURCE_TYPE_DC;
+            default -> null;
+        };
+    }
+
+    public Double defaultFrequency(ElementType type, String sourceType) {
+        if (!type.isSource()) {
+            return null;
+        }
+        return SOURCE_TYPE_SINE.equals(normalizeSourceType(sourceType))
+                ? defaultSineFrequency(type)
+                : null;
+    }
+
+    public static String normalizeSourceType(String sourceType) {
+        String candidate = sourceType == null ? "" : sourceType.trim().toLowerCase();
+        return SOURCE_TYPE_SINE.equals(candidate) ? SOURCE_TYPE_SINE : SOURCE_TYPE_DC;
+    }
+
+    public static String formatSourceTypeLabel(String sourceType) {
+        return SOURCE_TYPE_SINE.equals(normalizeSourceType(sourceType)) ? "sinus" : "dc";
+    }
+
+    public static String formatFrequencyLabel(Double frequency) {
+        return frequency == null ? "-" : formatNumericValue(frequency) + " Hz";
     }
 
     public List<ResolvedWire> resolveWires(Map<String, WorkspaceElement> elements, Collection<WorkspaceWire> wires) {
@@ -477,7 +597,15 @@ public class WorkspaceMockService {
     }
 
     private WorkspaceElement createSeedElement(String id, ElementType type, double left, double top) {
-        return new WorkspaceElement(id, type, left, top, defaultValue(type));
+        String sourceType = defaultSourceType(type);
+        return new WorkspaceElement(
+                id,
+                type,
+                left,
+                top,
+                defaultValue(type),
+                sourceType,
+                defaultFrequency(type, sourceType));
     }
 
     private Optional<ResolvedWire> resolveWire(Map<String, WorkspaceElement> elements, WorkspaceWire wire) {
@@ -566,6 +694,9 @@ public class WorkspaceMockService {
         if (containsPin(component, elements, ElementType.VOLTAGE, "POS")) {
             return "IN";
         }
+        if (containsPin(component, elements, ElementType.CURRENT, "POS")) {
+            return "ISRC";
+        }
         if (containsPin(component, elements, ElementType.OPAMP, "OUT")) {
             return "OUT";
         }
@@ -637,7 +768,7 @@ public class WorkspaceMockService {
                 case "B" -> Optional.of(pin(element, pinKey, 48, 190));
                 default -> Optional.empty();
             };
-            case VOLTAGE -> switch (pinKey) {
+            case VOLTAGE, CURRENT -> switch (pinKey) {
                 case "POS" -> Optional.of(pin(element, pinKey, 74, 46));
                 case "NEG" -> Optional.of(pin(element, pinKey, 74, 326));
                 default -> Optional.empty();
@@ -671,7 +802,7 @@ public class WorkspaceMockService {
     private List<String> pinKeys(ElementType type) {
         return switch (type) {
             case RESISTOR, INDUCTOR, CAPACITOR -> List.of("A", "B");
-            case VOLTAGE -> List.of("POS", "NEG");
+            case VOLTAGE, CURRENT -> List.of("POS", "NEG");
             case GROUND -> List.of("REF");
             case DIODE -> List.of("ANODE", "CATHODE");
             case OPAMP -> List.of("IN+", "IN-", "OUT");
@@ -681,7 +812,7 @@ public class WorkspaceMockService {
     private static Optional<PinRef> primaryPinA(WorkspaceElement element) {
         return switch (element.type()) {
             case RESISTOR, INDUCTOR, CAPACITOR -> Optional.of(new PinRef(element.id(), "A"));
-            case VOLTAGE -> Optional.of(new PinRef(element.id(), "POS"));
+            case VOLTAGE, CURRENT -> Optional.of(new PinRef(element.id(), "POS"));
             case GROUND -> Optional.of(new PinRef(element.id(), "REF"));
             case DIODE -> Optional.of(new PinRef(element.id(), "ANODE"));
             case OPAMP -> Optional.of(new PinRef(element.id(), "IN+"));
@@ -691,7 +822,7 @@ public class WorkspaceMockService {
     private static Optional<PinRef> primaryPinB(WorkspaceElement element) {
         return switch (element.type()) {
             case RESISTOR, INDUCTOR, CAPACITOR -> Optional.of(new PinRef(element.id(), "B"));
-            case VOLTAGE -> Optional.of(new PinRef(element.id(), "NEG"));
+            case VOLTAGE, CURRENT -> Optional.of(new PinRef(element.id(), "NEG"));
             case GROUND -> Optional.empty();
             case DIODE -> Optional.of(new PinRef(element.id(), "CATHODE"));
             case OPAMP -> Optional.of(new PinRef(element.id(), "IN-"));
@@ -706,6 +837,7 @@ public class WorkspaceMockService {
         return switch (element.type()) {
             case RESISTOR, INDUCTOR, VOLTAGE, DIODE -> "I(" + element.id() + ")";
             case CAPACITOR -> "V(" + preferredVoltageNet(nodeA, nodeB) + ")";
+            case CURRENT -> "V(" + preferredVoltageNet(nodeA, nodeB) + ")";
             case GROUND -> "V(0)";
             case OPAMP -> "V(" + topology.netName(new PinRef(element.id(), "OUT"), "OUT") + ")";
         };
@@ -739,7 +871,9 @@ public class WorkspaceMockService {
         String value = element.value();
 
         return switch (element.type()) {
-            case RESISTOR, INDUCTOR, CAPACITOR, VOLTAGE, DIODE -> element.id() + " " + nodeA + " " + nodeB + " " + value;
+            case RESISTOR, INDUCTOR, CAPACITOR, DIODE -> element.id() + " " + nodeA + " " + nodeB + " " + value;
+            case VOLTAGE -> formatSourceNetlistLine("VSRC", element, nodeA, nodeB);
+            case CURRENT -> formatSourceNetlistLine("ISRC", element, nodeA, nodeB);
             case GROUND -> "* " + element.id() + " -> net 0";
             case OPAMP -> "X" + element.id()
                     + " " + topology.netName(new PinRef(element.id(), "IN+"), "INP")
@@ -764,6 +898,52 @@ public class WorkspaceMockService {
                 .map(ResolvedNet::name)
                 .reduce((left, right) -> left + ", " + right)
                 .orElse("brak połączeń");
+    }
+
+    private static String formatSourceNetlistLine(String keyword, WorkspaceElement element, String nodeA, String nodeB) {
+        String normalizedSourceType = normalizedSourceType(element.sourceType());
+        StringBuilder builder = new StringBuilder()
+                .append(keyword)
+                .append(' ')
+                .append(element.id())
+                .append(' ')
+                .append(nodeA)
+                .append(' ')
+                .append(nodeB)
+                .append(" type=")
+                .append(normalizedSourceType)
+                .append(" val=")
+                .append(element.value());
+
+        if (SOURCE_TYPE_SINE.equals(normalizedSourceType) && element.frequency() != null) {
+            builder.append(" freq=").append(formatNumericValue(element.frequency()));
+        }
+        return builder.toString();
+    }
+
+    private static String normalizedSourceType(String sourceType) {
+        if (sourceType != null && SOURCE_TYPE_SINE.equalsIgnoreCase(sourceType.trim())) {
+            return SOURCE_TYPE_SINE;
+        }
+        return SOURCE_TYPE_DC;
+    }
+
+    private static String formatNumericValue(double value) {
+        if (Math.abs(value - Math.rint(value)) < 0.0000001) {
+            return Long.toString(Math.round(value));
+        }
+        return Double.toString(value);
+    }
+
+    private static double defaultSineFrequency(ElementType type) {
+        return type == ElementType.VOLTAGE ? 1000.0 : 50.0;
+    }
+
+    private static Double normalizeFrequencyValue(ElementType type, Double frequency, boolean fallbackToDefault) {
+        if (frequency != null && frequency > 0) {
+            return frequency;
+        }
+        return fallbackToDefault ? defaultSineFrequency(type) : null;
     }
 
     private static PinPosition pin(WorkspaceElement element, String pinKey, double relativeX, double relativeY) {
@@ -805,7 +985,8 @@ public class WorkspaceMockService {
         RESISTOR("R", "Rezystor", 220, 110),
         CAPACITOR("C", "Kondensator", 176, 234),
         INDUCTOR("L", "Cewka", 248, 110),
-        VOLTAGE("V", "Źródło", 172, 334),
+        VOLTAGE("V", "Źródło napięcia", 172, 334),
+        CURRENT("I", "Źródło prądu", 172, 334),
         GROUND("GND", "Masa", 136, 104),
         DIODE("D", "Dioda", 180, 110),
         OPAMP("U", "Wzmacniacz", 220, 180);
@@ -837,9 +1018,23 @@ public class WorkspaceMockService {
         public double height() {
             return height;
         }
+
+        public boolean isSource() {
+            return this == VOLTAGE || this == CURRENT;
+        }
     }
 
-    public record WorkspaceElement(String id, ElementType type, double left, double top, String value) {
+    public record WorkspaceElement(
+            String id,
+            ElementType type,
+            double left,
+            double top,
+            String value,
+            String sourceType,
+            Double frequency) {
+        public boolean isSource() {
+            return type.isSource();
+        }
     }
 
     public record PinRef(String elementId, String pinKey) {
@@ -919,6 +1114,8 @@ public class WorkspaceMockService {
             String symbol,
             String typeLabel,
             String value,
+            String sourceType,
+            String frequency,
             String nodeA,
             String nodeB,
             String orientation,
@@ -980,6 +1177,10 @@ public class WorkspaceMockService {
                     .map(line -> format(line, element.id()))
                     .collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
             logs.add("Aktualna wartość: " + resolvedValue + ".");
+            if (element.isSource()) {
+                logs.add("Typ źródła: " + formatSourceTypeLabel(element.sourceType()) + ".");
+                logs.add("Częstotliwość: " + formatFrequencyLabel(element.frequency()) + ".");
+            }
             logs.add("Połączenia aktywne: A=" + resolvedNodeA + ", B=" + resolvedNodeB + ".");
             logs.add("Dostępne nety: " + summarizeNetNames(topology) + ".");
             return new ElementDetails(
@@ -987,6 +1188,8 @@ public class WorkspaceMockService {
                     symbol,
                     typeLabel,
                     resolvedValue,
+                    element.isSource() ? formatSourceTypeLabel(element.sourceType()) : "-",
+                    element.isSource() ? formatFrequencyLabel(element.frequency()) : "-",
                     resolvedNodeA,
                     resolvedNodeB,
                     orientation,

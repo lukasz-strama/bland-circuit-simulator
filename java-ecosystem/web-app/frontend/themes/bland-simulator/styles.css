@@ -224,6 +224,14 @@ vaadin-text-field.net-name-field {
   width: 150px;
 }
 
+vaadin-select.source-type-select {
+  width: 112px;
+}
+
+vaadin-text-field.source-frequency-field {
+  width: 132px;
+}
+
 .badge {
   display: inline-flex;
   align-items: center;
@@ -347,6 +355,7 @@ vaadin-text-field.component-search {
 .workspace-panel[data-tool="capacitor"] .workspace-viewport,
 .workspace-panel[data-tool="inductor"] .workspace-viewport,
 .workspace-panel[data-tool="voltage"] .workspace-viewport,
+.workspace-panel[data-tool="current"] .workspace-viewport,
 .workspace-panel[data-tool="ground"] .workspace-viewport,
 .workspace-panel[data-tool="diode"] .workspace-viewport,
 .workspace-panel[data-tool="opamp"] .workspace-viewport {
@@ -616,6 +625,11 @@ vaadin-text-field.component-search {
 .component-value,
 .small-note {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.component-value.is-secondary {
+  color: var(--text-dim);
+  font-size: 10px;
 }
 
 .title-block text,

@@ -55,8 +55,10 @@ public class MainLayout extends Div {
     private final Span statusAnalysisValue = new Span();
     private final Span statusZoomValue = new Span();
     private final Select<String> analysisSelect = new Select<>();
+    private final Select<String> sourceTypeSelect = new Select<>();
     private final TextField componentSearch = new TextField();
     private final TextField elementValueField = new TextField();
+    private final TextField sourceFrequencyField = new TextField();
     private final TextField netNameField = new TextField();
     private final Map<WorkspaceTool, Span> railButtons = new EnumMap<>(WorkspaceTool.class);
     private final Map<QuickComponent, Div> quickComponentButtons = new LinkedHashMap<>();
@@ -112,6 +114,8 @@ public class MainLayout extends Div {
         configureAnalysisSelect();
         configureComponentSearch();
         configureElementValueField();
+        configureSourceTypeSelect();
+        configureSourceFrequencyField();
         configureNetNameField();
         configureHistoryButtons();
         configureProjectButtons();
@@ -135,7 +139,7 @@ public class MainLayout extends Div {
     }
 
     private void configureComponentSearch() {
-        componentSearch.setPlaceholder("Szukaj w bibliotece: rezystor, dioda, opamp...");
+        componentSearch.setPlaceholder("Szukaj w bibliotece: rezystor, dioda, źródło prądu...");
         componentSearch.addClassName("component-search");
         componentSearch.setClearButtonVisible(true);
         componentSearch.setValueChangeMode(ValueChangeMode.EAGER);
@@ -146,6 +150,19 @@ public class MainLayout extends Div {
         elementValueField.setPlaceholder("Wartość elementu");
         elementValueField.addClassName("element-value-field");
         elementValueField.setClearButtonVisible(true);
+    }
+
+    private void configureSourceTypeSelect() {
+        sourceTypeSelect.setItems(WorkspaceMockService.SOURCE_TYPE_DC, WorkspaceMockService.SOURCE_TYPE_SINE);
+        sourceTypeSelect.setItemLabelGenerator(type -> WorkspaceMockService.SOURCE_TYPE_SINE.equals(type) ? "sinus" : "dc");
+        sourceTypeSelect.addClassName("source-type-select");
+        sourceTypeSelect.addValueChangeListener(event -> updateSourceFrequencyFieldState(event.getValue(), true));
+    }
+
+    private void configureSourceFrequencyField() {
+        sourceFrequencyField.setPlaceholder("Częstotliwość [Hz]");
+        sourceFrequencyField.addClassName("source-frequency-field");
+        sourceFrequencyField.setClearButtonVisible(true);
     }
 
     private void configureNetNameField() {
@@ -840,6 +857,15 @@ public class MainLayout extends Div {
             return;
         }
 
+        if (element.isSource()) {
+            try {
+                Double.parseDouble(candidate);
+            } catch (NumberFormatException exception) {
+                statusMessageValue.setText("Amplituda źródła musi być liczbą, np. 5.0 albo 0.02.");
+                return;
+            }
+        }
+
         workspaceElements.put(selectedElementId, workspaceMockService.updateElementValue(element, candidate));
         refreshWorkspaceState();
         recordWorkspaceChange();
@@ -868,6 +894,103 @@ public class MainLayout extends Div {
         refreshWorkspaceState();
         recordWorkspaceChange();
         statusMessageValue.setText("Przywrócono domyślną wartość dla " + selectedElementId + ": " + defaultValue + ".");
+    }
+
+    private void applySelectedSourceSettings() {
+        if (selectedElementId == null || selectedWireId != null) {
+            statusMessageValue.setText("Najpierw zaznacz element na arkuszu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        if (!element.isSource()) {
+            statusMessageValue.setText("Ustawienia typu i częstotliwości dotyczą tylko źródeł.");
+            return;
+        }
+
+        String sourceType = sourceTypeSelect.getValue();
+        if (sourceType == null || sourceType.isBlank()) {
+            sourceType = workspaceMockService.defaultSourceType(element.type());
+        }
+        sourceType = WorkspaceMockService.normalizeSourceType(sourceType);
+
+        Double frequency = null;
+        if (WorkspaceMockService.SOURCE_TYPE_SINE.equals(sourceType)) {
+            String candidate = sourceFrequencyField.getValue() == null ? "" : sourceFrequencyField.getValue().trim();
+            if (candidate.isBlank()) {
+                statusMessageValue.setText("Dla przebiegu sinus wpisz częstotliwość w hercach.");
+                return;
+            }
+
+            try {
+                frequency = Double.parseDouble(candidate);
+            } catch (NumberFormatException exception) {
+                statusMessageValue.setText("Częstotliwość musi być liczbą dodatnią w formacie dziesiętnym.");
+                return;
+            }
+
+            if (frequency <= 0) {
+                statusMessageValue.setText("Częstotliwość musi być większa od zera.");
+                return;
+            }
+        }
+
+        WorkspaceMockService.WorkspaceElement updated =
+                workspaceMockService.updateSourceFrequency(
+                        workspaceMockService.updateSourceType(element, sourceType),
+                        frequency);
+        if (updated.equals(element)) {
+            statusMessageValue.setText("Ustawienia źródła nie zmieniły się.");
+            return;
+        }
+
+        workspaceElements.put(selectedElementId, updated);
+        refreshWorkspaceState();
+        recordWorkspaceChange();
+        String settingsLabel = WorkspaceMockService.formatSourceTypeLabel(updated.sourceType());
+        if (updated.frequency() != null) {
+            settingsLabel += " / " + WorkspaceMockService.formatFrequencyLabel(updated.frequency());
+        }
+        statusMessageValue.setText("Zmieniono ustawienia źródła " + selectedElementId + " na " + settingsLabel + ".");
+    }
+
+    private void resetSelectedSourceSettings() {
+        if (selectedElementId == null || selectedWireId != null) {
+            statusMessageValue.setText("Najpierw zaznacz element na arkuszu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        if (!element.isSource()) {
+            statusMessageValue.setText("Ten element nie używa ustawień źródła.");
+            return;
+        }
+
+        String defaultSourceType = workspaceMockService.defaultSourceType(element.type());
+        Double defaultFrequency = workspaceMockService.defaultFrequency(element.type(), defaultSourceType);
+        WorkspaceMockService.WorkspaceElement updated =
+                workspaceMockService.updateSourceFrequency(
+                        workspaceMockService.updateSourceType(element, defaultSourceType),
+                        defaultFrequency);
+        if (updated.equals(element)) {
+            statusMessageValue.setText("To źródło już używa ustawień domyślnych.");
+            return;
+        }
+
+        workspaceElements.put(selectedElementId, updated);
+        refreshWorkspaceState();
+        recordWorkspaceChange();
+        statusMessageValue.setText("Przywrócono domyślne ustawienia źródła dla " + selectedElementId + ".");
     }
 
     private void startWireEndpointEdit(WorkspaceMockService.WireEndpoint endpoint) {
@@ -978,6 +1101,7 @@ public class MainLayout extends Div {
             if (!elementValueField.isEmpty()) {
                 elementValueField.clear();
             }
+            syncSourceControls();
             return;
         }
 
@@ -988,12 +1112,81 @@ public class MainLayout extends Div {
             if (!elementValueField.isEmpty()) {
                 elementValueField.clear();
             }
+            syncSourceControls();
             return;
         }
 
         selectedElementReadout.setText(element.id());
         if (!element.value().equals(elementValueField.getValue())) {
             elementValueField.setValue(element.value());
+        }
+        syncSourceControls();
+    }
+
+    private void syncSourceControls() {
+        if (selectedElementId == null || selectedWireId != null) {
+            sourceTypeSelect.clear();
+            sourceTypeSelect.setEnabled(false);
+            if (!sourceFrequencyField.isEmpty()) {
+                sourceFrequencyField.clear();
+            }
+            sourceFrequencyField.setEnabled(false);
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null || !element.isSource()) {
+            sourceTypeSelect.clear();
+            sourceTypeSelect.setEnabled(false);
+            if (!sourceFrequencyField.isEmpty()) {
+                sourceFrequencyField.clear();
+            }
+            sourceFrequencyField.setEnabled(false);
+            return;
+        }
+
+        String normalizedType = WorkspaceMockService.normalizeSourceType(element.sourceType());
+        sourceTypeSelect.setEnabled(true);
+        if (!normalizedType.equals(sourceTypeSelect.getValue())) {
+            sourceTypeSelect.setValue(normalizedType);
+        }
+
+        String frequencyValue = element.frequency() == null ? "" : formatFrequencyInput(element.frequency());
+        if (!frequencyValue.equals(sourceFrequencyField.getValue())) {
+            sourceFrequencyField.setValue(frequencyValue);
+        }
+        updateSourceFrequencyFieldState(normalizedType, false);
+    }
+
+    private void updateSourceFrequencyFieldState(String sourceType, boolean populateDefaultWhenEmpty) {
+        String normalizedType = WorkspaceMockService.normalizeSourceType(sourceType);
+        boolean sine = WorkspaceMockService.SOURCE_TYPE_SINE.equals(normalizedType);
+        sourceFrequencyField.setEnabled(sourceTypeSelect.isEnabled() && sine);
+        if (!sine) {
+            if (!sourceFrequencyField.isEmpty()) {
+                sourceFrequencyField.clear();
+            }
+            return;
+        }
+
+        if (!populateDefaultWhenEmpty || selectedElementId == null) {
+            return;
+        }
+
+        if (!sourceFrequencyField.isEmpty()) {
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null || !element.isSource()) {
+            return;
+        }
+
+        Double fallbackFrequency = element.frequency() != null
+                ? element.frequency()
+                : workspaceMockService.defaultFrequency(element.type(), normalizedType);
+        if (fallbackFrequency != null) {
+            sourceFrequencyField.setValue(formatFrequencyInput(fallbackFrequency));
         }
     }
 
@@ -1160,6 +1353,12 @@ public class MainLayout extends Div {
         Span resetElementValue = createAction("Domyślna", "mini-button");
         resetElementValue.addClickListener(event -> resetSelectedElementValue());
 
+        Span applySourceSettings = createAction("Ustaw", "mini-button");
+        applySourceSettings.addClickListener(event -> applySelectedSourceSettings());
+
+        Span resetSourceSettings = createAction("Auto", "mini-button");
+        resetSourceSettings.addClickListener(event -> resetSelectedSourceSettings());
+
         Span rewireStart = createAction("Początek", "mini-button");
         rewireStart.addClickListener(event -> startWireEndpointEdit(WorkspaceMockService.WireEndpoint.START));
 
@@ -1231,6 +1430,14 @@ public class MainLayout extends Div {
 
         secondaryRow.add(separator());
         secondaryRow.add(buildToolbarGroup(
+                createLabel("Źródło"),
+                sourceTypeSelect,
+                sourceFrequencyField,
+                applySourceSettings,
+                resetSourceSettings));
+
+        secondaryRow.add(separator());
+        secondaryRow.add(buildToolbarGroup(
                 createLabel("Przewód"),
                 selectedWireReadout,
                 wireEditModeReadout,
@@ -1276,6 +1483,7 @@ public class MainLayout extends Div {
                 createQuickComponent(QuickComponent.CAPACITOR),
                 createQuickComponent(QuickComponent.INDUCTOR),
                 createQuickComponent(QuickComponent.VOLTAGE),
+                createQuickComponent(QuickComponent.CURRENT),
                 createQuickComponent(QuickComponent.GROUND),
                 createQuickComponent(QuickComponent.DIODE),
                 createQuickComponent(QuickComponent.OPAMP)));
@@ -1461,6 +1669,13 @@ public class MainLayout extends Div {
         return String.format(Locale.US, "%.3f", scale);
     }
 
+    private static String formatFrequencyInput(double frequency) {
+        if (Math.abs(frequency - Math.rint(frequency)) < 0.0000001) {
+            return Long.toString(Math.round(frequency));
+        }
+        return Double.toString(frequency);
+    }
+
     private record WorkspaceSnapshot(
             LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
             LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
@@ -1496,7 +1711,8 @@ public class MainLayout extends Div {
         PLACE_RESISTOR("resistor", "Wstaw: Rezystor", "", WorkspaceMockService.ElementType.RESISTOR),
         PLACE_CAPACITOR("capacitor", "Wstaw: Kondensator", "", WorkspaceMockService.ElementType.CAPACITOR),
         PLACE_INDUCTOR("inductor", "Wstaw: Cewka", "", WorkspaceMockService.ElementType.INDUCTOR),
-        PLACE_VOLTAGE("voltage", "Wstaw: Źródło", "", WorkspaceMockService.ElementType.VOLTAGE),
+        PLACE_VOLTAGE("voltage", "Wstaw: Źródło napięcia", "", WorkspaceMockService.ElementType.VOLTAGE),
+        PLACE_CURRENT("current", "Wstaw: Źródło prądu", "", WorkspaceMockService.ElementType.CURRENT),
         PLACE_GROUND("ground", "Wstaw: Masa", "", WorkspaceMockService.ElementType.GROUND),
         PLACE_DIODE("diode", "Wstaw: Dioda", "", WorkspaceMockService.ElementType.DIODE),
         PLACE_OPAMP("opamp", "Wstaw: Wzmacniacz", "", WorkspaceMockService.ElementType.OPAMP);
@@ -1539,6 +1755,7 @@ public class MainLayout extends Div {
                 case CAPACITOR -> PLACE_CAPACITOR;
                 case INDUCTOR -> PLACE_INDUCTOR;
                 case VOLTAGE -> PLACE_VOLTAGE;
+                case CURRENT -> PLACE_CURRENT;
                 case GROUND -> PLACE_GROUND;
                 case DIODE -> PLACE_DIODE;
                 case OPAMP -> PLACE_OPAMP;
@@ -1550,7 +1767,8 @@ public class MainLayout extends Div {
         RESISTOR("R", "Rezystor", WorkspaceMockService.ElementType.RESISTOR),
         CAPACITOR("C", "Kondensator", WorkspaceMockService.ElementType.CAPACITOR),
         INDUCTOR("L", "Cewka", WorkspaceMockService.ElementType.INDUCTOR),
-        VOLTAGE("V", "Źródło", WorkspaceMockService.ElementType.VOLTAGE),
+        VOLTAGE("V", "Źródło napięcia", WorkspaceMockService.ElementType.VOLTAGE),
+        CURRENT("I", "Źródło prądu", WorkspaceMockService.ElementType.CURRENT),
         GROUND("0", "Masa", WorkspaceMockService.ElementType.GROUND),
         DIODE("D", "Dioda", WorkspaceMockService.ElementType.DIODE),
         OPAMP("OP", "Wzmacniacz", WorkspaceMockService.ElementType.OPAMP);
