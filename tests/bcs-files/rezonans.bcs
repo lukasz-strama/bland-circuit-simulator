@@ -1,0 +1,13 @@
+* rownolegly rezonans LC
+* f rezonansowa f = 1 / (2 * pi * sqrt(L * C)) ~= 5032.92 Hz
+
+VSRC V1 IN 0 type=sin val=1.0 freq=5032.9
+
+* wysoka R zrodla
+RES R1 IN N1 val=100000
+
+* C i L równolegle do masy
+IND L1 N1 0 val=1e-3
+CAP C1 N1 0 val=1e-6
+
+.SIMULATE type=trans tstop=0.01 tstep=0.000001

@@ -1,0 +1,20 @@
+* sygnal podany na LSB
+
+VSRC V_LSB B0 0 type=sin val=32.0 freq=50
+
+RES R_TERM N0 0 val=20000
+
+* R szeregowe
+RES RS1 N1 N0 val=10000
+RES RS2 N2 N1 val=10000
+RES RS3 N3 N2 val=10000
+RES RS4 N4 N3 val=10000
+
+* R rownolegle
+RES RL0 N0 B0 val=20000  * LSB podpiete pod zrodlo
+RES RL1 N1 0  val=20000
+RES RL2 N2 0  val=20000
+RES RL3 N3 0  val=20000
+RES RL4 N4 0  val=20000 
+
+.SIMULATE type=trans tstop=0.04 tstep=0.0001

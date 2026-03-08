@@ -1,0 +1,12 @@
+VSRC V1 N1 0 type=sin val=10.0 freq=50
+
+* zwarcie (1 mikro om)
+RES R_TINY N1 N2 val=1e-6
+
+* przerwa (1 Giga om)
+RES R_HUGE N2 N3 val=1e9
+
+* obc (1 mikro om)
+RES R_LOAD N3 0 val=1e-6
+
+.SIMULATE type=trans tstop=0.04 tstep=0.0001
