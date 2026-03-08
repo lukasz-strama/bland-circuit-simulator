@@ -1,0 +1,98 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "BCS Netlist",
+	"scopeName": "source.bcs",
+	"fileTypes": [
+		"bcs"
+	],
+	"patterns": [
+		{
+			"include": "#comment"
+		},
+		{
+			"include": "#directive"
+		},
+		{
+			"include": "#component"
+		},
+		{
+			"include": "#parameter-numeric"
+		},
+		{
+			"include": "#parameter-string"
+		}
+	],
+	"repository": {
+		"comment": {
+			"patterns": [
+				{
+					"comment": "Full-line comment starting with *",
+					"name": "comment.line.asterisk.bcs",
+					"match": "^\\*.*$"
+				},
+				{
+					"comment": "Inline comment: * preceded by whitespace",
+					"name": "comment.line.inline.bcs",
+					"match": "(?<=\\s)\\*\\s.*$"
+				}
+			]
+		},
+		"directive": {
+			"comment": "Simulator directives like .SIMULATE",
+			"match": "(\\.[A-Z_]+)",
+			"captures": {
+				"1": {
+					"name": "keyword.control.directive.bcs"
+				}
+			}
+		},
+		"component": {
+			"comment": "Component instantiation: TYPE INSTANCE NODE+ NODE-",
+			"match": "^\\s*(VSRC|ISRC|RES|CAP|IND)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)",
+			"captures": {
+				"1": {
+					"name": "keyword.other.component-type.bcs"
+				},
+				"2": {
+					"name": "entity.name.tag.instance.bcs"
+				},
+				"3": {
+					"name": "variable.other.node.bcs"
+				},
+				"4": {
+					"name": "variable.other.node.bcs"
+				}
+			}
+		},
+		"parameter-numeric": {
+			"comment": "key=number including scientific notation (e.g. val=100e-9)",
+			"match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*([-+]?[0-9]*\\.?[0-9]+(?:[eE][-+]?[0-9]+)?)",
+			"captures": {
+				"1": {
+					"name": "support.type.property-name.bcs"
+				},
+				"2": {
+					"name": "keyword.operator.assignment.bcs"
+				},
+				"3": {
+					"name": "constant.numeric.bcs"
+				}
+			}
+		},
+		"parameter-string": {
+			"comment": "key=identifier (e.g. type=sin)",
+			"match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
+			"captures": {
+				"1": {
+					"name": "support.type.property-name.bcs"
+				},
+				"2": {
+					"name": "keyword.operator.assignment.bcs"
+				},
+				"3": {
+					"name": "string.unquoted.value.bcs"
+				}
+			}
+		}
+	}
+}
