@@ -41,7 +41,9 @@ set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(Crow)
 
-cmake_policy(SET CMP0169 OLD)
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+endif()
 FetchContent_GetProperties(Eigen3)
 if(NOT eigen3_POPULATED)
     FetchContent_Populate(Eigen3)

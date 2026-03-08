@@ -1,0 +1,9 @@
+services:
+  engine:
+    build:
+      context: ./engine-cpp
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081

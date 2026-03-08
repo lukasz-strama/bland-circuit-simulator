@@ -1,5 +1,7 @@
 #include <crow.h>
 
+#include <cstdlib>
+
 #include "api/handlers.hpp"
 
 int main() {
@@ -9,7 +11,11 @@ int main() {
         .methods(crow::HTTPMethod::POST)(
             [](const crow::request &req) { return api::handle_simulate(req); });
 
-    app.port(8081).multithreaded().run();
+    const char *port_env = std::getenv("PORT");
+    uint16_t    port =
+        port_env ? static_cast<uint16_t>(std::stoi(port_env)) : 8081;
+
+    app.port(port).multithreaded().run();
 
     return 0;
 }
