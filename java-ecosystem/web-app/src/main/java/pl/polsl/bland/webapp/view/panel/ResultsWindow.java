@@ -1,13 +1,13 @@
 package pl.polsl.bland.webapp.view.panel;
 
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.Svg;
 import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.grid.Grid;
 import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.dom.Element;
 import pl.polsl.bland.webapp.service.WorkspaceMockService;
 
 import java.util.EnumMap;
@@ -43,6 +43,7 @@ public final class ResultsWindow extends Div {
     private final Div plotMeta = new Div();
     private final Div plotViewport = new Div();
     private final Div plotEmptyState = new Div();
+    private final Svg waveformSvg = new Svg();
     private final Pre netlistBox = new Pre();
     private final Div logList = new Div();
     private final Map<ResultTab, Div> tabButtons = new EnumMap<>(ResultTab.class);
@@ -210,6 +211,8 @@ public final class ResultsWindow extends Div {
         plotMeta.addClassName("waveform-meta");
         plotViewport.addClassName("plot-viewport");
         plotEmptyState.addClassNames("hint-box", "plot-empty-state");
+        waveformSvg.addClassName("waveform-svg");
+        plotViewport.add(waveformSvg);
         plotBox.add(plotTitle, plotHint, plotMeta, plotViewport, plotEmptyState);
         return plotBox;
     }
@@ -254,7 +257,7 @@ public final class ResultsWindow extends Div {
 
     private void clearPlot(String message) {
         plotMeta.setText("");
-        plotViewport.removeAll();
+        waveformSvg.setSvg("");
         plotEmptyState.setText(message);
         plotEmptyState.setVisible(true);
     }
@@ -270,15 +273,11 @@ public final class ResultsWindow extends Div {
                 + " | zakres sygnalu: " + formatNumber(min(yValues)) + " " + plotUnit
                 + " -> " + formatNumber(max(yValues)) + " " + plotUnit);
 
-        Div host = new Div();
-        host.addClassName("waveform-host");
-        host.getElement().appendChild(buildSvg(xValues, yValues));
-        plotViewport.removeAll();
-        plotViewport.add(host);
+        waveformSvg.setSvg(buildSvgMarkup(xValues, yValues));
         plotEmptyState.setVisible(false);
     }
 
-    private Element buildSvg(double[] xValues, double[] yValues) {
+    private String buildSvgMarkup(double[] xValues, double[] yValues) {
         double width = 760;
         double height = 240;
         double left = 48;
@@ -298,26 +297,28 @@ public final class ResultsWindow extends Div {
             yMax += padding;
         }
 
-        Element svg = new Element("svg");
-        svg.setAttribute("viewBox", "0 0 " + (int) width + " " + (int) height);
-        svg.setAttribute("preserveAspectRatio", "none");
-        svg.setAttribute("class", "waveform-svg");
+        StringBuilder svg = new StringBuilder()
+                .append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ")
+                .append((int) width)
+                .append(' ')
+                .append((int) height)
+                .append("\" preserveAspectRatio=\"none\">");
 
-        svg.appendChild(line(left, top, left, top + plotHeight, "waveform-axis"));
-        svg.appendChild(line(left, top + plotHeight, left + plotWidth, top + plotHeight, "waveform-axis"));
+        svg.append(lineMarkup(left, top, left, top + plotHeight, "waveform-axis"));
+        svg.append(lineMarkup(left, top + plotHeight, left + plotWidth, top + plotHeight, "waveform-axis"));
 
         for (int index = 0; index <= 4; index++) {
             double y = top + (plotHeight * index / 4.0);
-            svg.appendChild(line(left, y, left + plotWidth, y, "waveform-grid"));
+            svg.append(lineMarkup(left, y, left + plotWidth, y, "waveform-grid"));
         }
         for (int index = 0; index <= 5; index++) {
             double x = left + (plotWidth * index / 5.0);
-            svg.appendChild(line(x, top, x, top + plotHeight, "waveform-grid"));
+            svg.append(lineMarkup(x, top, x, top + plotHeight, "waveform-grid"));
         }
 
         if (yMin < 0 && yMax > 0) {
             double zeroY = top + plotHeight - ((0 - yMin) / (yMax - yMin) * plotHeight);
-            svg.appendChild(line(left, zeroY, left + plotWidth, zeroY, "waveform-zero"));
+            svg.append(lineMarkup(left, zeroY, left + plotWidth, zeroY, "waveform-zero"));
         }
 
         StringBuilder points = new StringBuilder();
@@ -330,22 +331,27 @@ public final class ResultsWindow extends Div {
             points.append(formatNumber(scaledX)).append(',').append(formatNumber(scaledY));
         }
 
-        Element polyline = new Element("polyline");
-        polyline.setAttribute("points", points.toString());
-        polyline.setAttribute("class", "waveform-line");
-        svg.appendChild(polyline);
-
-        return svg;
+        svg.append("<polyline points=\"")
+                .append(points)
+                .append("\" fill=\"none\" stroke=\"#2f5f9b\" stroke-width=\"2.4\"")
+                .append(" stroke-linecap=\"round\" stroke-linejoin=\"round\" />")
+                .append("</svg>");
+        return svg.toString();
     }
 
-    private Element line(double x1, double y1, double x2, double y2, String className) {
-        Element line = new Element("line");
-        line.setAttribute("x1", formatNumber(x1));
-        line.setAttribute("y1", formatNumber(y1));
-        line.setAttribute("x2", formatNumber(x2));
-        line.setAttribute("y2", formatNumber(y2));
-        line.setAttribute("class", className);
-        return line;
+    private String lineMarkup(double x1, double y1, double x2, double y2, String className) {
+        String style = switch (className) {
+            case "waveform-axis" -> "stroke=\"#97a5b6\" stroke-width=\"1.2\"";
+            case "waveform-zero" -> "stroke=\"#aabed8\" stroke-width=\"1.2\" stroke-dasharray=\"6 4\"";
+            default -> "stroke=\"#d7dee8\" stroke-width=\"1\"";
+        };
+        return "<line "
+                + style
+                + " x1=\"" + formatNumber(x1)
+                + "\" y1=\"" + formatNumber(y1)
+                + "\" x2=\"" + formatNumber(x2)
+                + "\" y2=\"" + formatNumber(y2)
+                + "\" />";
     }
 
     private double min(double[] values) {
