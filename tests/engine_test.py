@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 
+import signal
+import sys
+
+signal.signal(signal.SIGINT, lambda *_: (print(f"\n\033[33mInterrupted.\033[0m"), sys.exit(130)))
+
 import argparse
 import csv
 import io
 import math
 import subprocess
-import sys
 import time
 
 import requests
@@ -302,6 +306,9 @@ def run_interactive() -> None:
     except requests.ConnectionError:
         print(c("red", f"Connection refused. Is the engine running at {CONFIG['url']}?"))
         return
+    except requests.ReadTimeout:
+        print(c("red", f"Request timed out. The engine at {CONFIG['url']} took too long to respond."))
+        return
 
     print(f"\n{c('cyan', '--- Response ---')}")
     print(f"  HTTP {resp.status_code}")
@@ -352,6 +359,9 @@ def main() -> None:
         except requests.ConnectionError:
             print(c("red", f"Connection refused. Is the engine running at {CONFIG['url']}?"))
             sys.exit(1)
+        except requests.ReadTimeout:
+            print(c("red", f"Request timed out. The engine at {CONFIG['url']} took too long to respond."))
+            sys.exit(1)
         print(f"\n  HTTP {resp.status_code}")
         if resp.status_code == 200:
             print_csv_table(resp.text)
@@ -391,6 +401,9 @@ def main() -> None:
             ok = func(args.verbose)
         except requests.ConnectionError:
             print(c("red", f"  Connection lost to {CONFIG['url']}"))
+            ok = False
+        except requests.ReadTimeout:
+            print(c("red", f"  Request timed out"))
             ok = False
         except Exception as e:
             print(c("red", f"  Exception: {e}"))
