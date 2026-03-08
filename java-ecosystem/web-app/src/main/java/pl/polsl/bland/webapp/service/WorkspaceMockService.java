@@ -745,43 +745,44 @@ public class WorkspaceMockService {
     }
 
     private List<WirePoint> route(PinPosition start, PinPosition end) {
-        List<WirePoint> path = new ArrayList<>();
-        appendPoint(path, new WirePoint(start.x(), start.y()));
+        WirePoint startPoint = new WirePoint(start.x(), start.y());
+        WirePoint endPoint = new WirePoint(end.x(), end.y());
 
-        if (sameAxis(start, end)) {
-            appendPoint(path, new WirePoint(end.x(), end.y()));
-            return path;
-        }
+        List<List<WirePoint>> candidates = List.of(
+                List.of(startPoint, endPoint),
+                List.of(startPoint, new WirePoint(end.x(), start.y()), endPoint),
+                List.of(startPoint, new WirePoint(start.x(), end.y()), endPoint),
+                List.of(
+                        startPoint,
+                        new WirePoint(start.x(), detourCoordinate(start.y(), end.y())),
+                        new WirePoint(end.x(), detourCoordinate(start.y(), end.y())),
+                        endPoint),
+                List.of(
+                        startPoint,
+                        new WirePoint(detourCoordinate(start.x(), end.x()), start.y()),
+                        new WirePoint(detourCoordinate(start.x(), end.x()), end.y()),
+                        endPoint));
 
-        WirePoint startLead = leadPoint(start);
-        WirePoint endLead = leadPoint(end);
-        appendPoint(path, startLead);
-
-        if (sameAxis(startLead, endLead)) {
-            appendPoint(path, endLead);
-            appendPoint(path, new WirePoint(end.x(), end.y()));
-            return path;
-        }
-
-        if (start.direction().isHorizontal()) {
-            double midX = snap((startLead.x() + endLead.x()) / 2.0);
-            if (sameCoordinate(midX, startLead.x()) || sameCoordinate(midX, endLead.x())) {
-                midX = snap(startLead.x() + (endLead.x() >= startLead.x() ? GRID_STEP * 2 : -GRID_STEP * 2));
+        List<WirePoint> bestPath = null;
+        RouteScore bestScore = null;
+        for (List<WirePoint> candidate : candidates) {
+            List<WirePoint> normalized = normalizePath(candidate);
+            if (normalized.size() < 2) {
+                continue;
             }
-            appendPoint(path, new WirePoint(midX, startLead.y()));
-            appendPoint(path, new WirePoint(midX, endLead.y()));
-        } else {
-            double midY = snap((startLead.y() + endLead.y()) / 2.0);
-            if (sameCoordinate(midY, startLead.y()) || sameCoordinate(midY, endLead.y())) {
-                midY = snap(startLead.y() + (endLead.y() >= startLead.y() ? GRID_STEP * 2 : -GRID_STEP * 2));
+
+            RouteScore score = scoreRoute(start, end, normalized);
+            if (bestScore == null || score.compareTo(bestScore) < 0) {
+                bestPath = normalized;
+                bestScore = score;
             }
-            appendPoint(path, new WirePoint(startLead.x(), midY));
-            appendPoint(path, new WirePoint(endLead.x(), midY));
         }
 
-        appendPoint(path, endLead);
-        appendPoint(path, new WirePoint(end.x(), end.y()));
-        return path;
+        if (bestPath != null) {
+            return bestPath;
+        }
+
+        return List.of(startPoint, endPoint);
     }
 
     private String describeWireGeometry(ResolvedWire resolvedWire) {
@@ -1023,10 +1024,6 @@ public class WorkspaceMockService {
         return sameCoordinate(start.x(), end.x()) || sameCoordinate(start.y(), end.y());
     }
 
-    private static boolean sameAxis(WirePoint start, WirePoint end) {
-        return sameCoordinate(start.x(), end.x()) || sameCoordinate(start.y(), end.y());
-    }
-
     private static boolean sameCoordinate(double first, double second) {
         return Math.abs(first - second) < 0.01;
     }
@@ -1035,12 +1032,6 @@ public class WorkspaceMockService {
         if (path.isEmpty() || !path.get(path.size() - 1).equals(point)) {
             path.add(point);
         }
-    }
-
-    private static WirePoint leadPoint(PinPosition pin) {
-        return new WirePoint(
-                snap(pin.x() + pin.direction().deltaX() * GRID_STEP),
-                snap(pin.y() + pin.direction().deltaY() * GRID_STEP));
     }
 
     private static double rotateRelativeX(
@@ -1077,6 +1068,118 @@ public class WorkspaceMockService {
 
     private static double clamp(double value, double min, double max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    private static List<WirePoint> normalizePath(List<WirePoint> candidate) {
+        List<WirePoint> normalized = new ArrayList<>();
+        for (WirePoint point : candidate) {
+            appendPoint(normalized, point);
+            while (normalized.size() >= 3) {
+                int last = normalized.size() - 1;
+                WirePoint a = normalized.get(last - 2);
+                WirePoint b = normalized.get(last - 1);
+                WirePoint c = normalized.get(last);
+                if (sameCoordinate(a.x(), b.x()) && sameCoordinate(b.x(), c.x())) {
+                    normalized.remove(last - 1);
+                    continue;
+                }
+                if (sameCoordinate(a.y(), b.y()) && sameCoordinate(b.y(), c.y())) {
+                    normalized.remove(last - 1);
+                    continue;
+                }
+                break;
+            }
+        }
+        return normalized;
+    }
+
+    private static RouteScore scoreRoute(PinPosition start, PinPosition end, List<WirePoint> path) {
+        PinDirection departure = segmentDirection(path.get(0), path.get(1));
+        PinDirection arrival = segmentDirection(path.get(path.size() - 2), path.get(path.size() - 1));
+
+        boolean inwardDeparture = departure != null && departure == opposite(start.direction());
+        boolean inwardArrival = arrival != null && arrival == end.direction();
+        int inwardPenalty = (inwardDeparture ? 1 : 0) + (inwardArrival ? 1 : 0);
+
+        int preferencePenalty = 0;
+        if (departure != null && departure != start.direction()) {
+            preferencePenalty++;
+        }
+        if (arrival != null && arrival != opposite(end.direction())) {
+            preferencePenalty++;
+        }
+
+        return new RouteScore(
+                inwardPenalty,
+                totalLength(path),
+                path.size() - 2,
+                preferencePenalty);
+    }
+
+    private static PinDirection segmentDirection(WirePoint start, WirePoint end) {
+        if (sameCoordinate(start.x(), end.x())) {
+            if (sameCoordinate(start.y(), end.y())) {
+                return null;
+            }
+            return end.y() > start.y() ? PinDirection.DOWN : PinDirection.UP;
+        }
+        if (sameCoordinate(start.y(), end.y())) {
+            return end.x() > start.x() ? PinDirection.RIGHT : PinDirection.LEFT;
+        }
+        return null;
+    }
+
+    private static PinDirection opposite(PinDirection direction) {
+        return switch (direction) {
+            case LEFT -> PinDirection.RIGHT;
+            case RIGHT -> PinDirection.LEFT;
+            case UP -> PinDirection.DOWN;
+            case DOWN -> PinDirection.UP;
+        };
+    }
+
+    private static double totalLength(List<WirePoint> path) {
+        double total = 0;
+        for (int index = 0; index < path.size() - 1; index++) {
+            WirePoint current = path.get(index);
+            WirePoint next = path.get(index + 1);
+            total += Math.abs(next.x() - current.x()) + Math.abs(next.y() - current.y());
+        }
+        return total;
+    }
+
+    private static double detourCoordinate(double first, double second) {
+        double midpoint = snap((first + second) / 2.0);
+        if (sameCoordinate(midpoint, first) && sameCoordinate(midpoint, second)) {
+            return snap(first - GRID_STEP * 2);
+        }
+        if (sameCoordinate(midpoint, first)) {
+            return snap(first + (second >= first ? GRID_STEP * 2 : -GRID_STEP * 2));
+        }
+        if (sameCoordinate(midpoint, second)) {
+            return snap(second + (first >= second ? GRID_STEP * 2 : -GRID_STEP * 2));
+        }
+        return midpoint;
+    }
+
+    private record RouteScore(int inwardPenalty, double totalLength, int bends, int preferencePenalty)
+            implements Comparable<RouteScore> {
+        @Override
+        public int compareTo(RouteScore other) {
+            int result = Integer.compare(inwardPenalty, other.inwardPenalty);
+            if (result != 0) {
+                return result;
+            }
+            result = Double.compare(totalLength, other.totalLength);
+            if (result != 0) {
+                return result;
+            }
+            result = Integer.compare(bends, other.bends);
+            if (result != 0) {
+                return result;
+            }
+            return Integer.compare(preferencePenalty, other.preferencePenalty);
+        }
     }
 
     public enum ElementType {
