@@ -77,6 +77,34 @@ public final class PropertiesWindow extends Div {
         simulationData.setVisible(simulationReady);
     }
 
+    public void showMeasuredElement(
+            WorkspaceMockService.ElementDetails details,
+            String traceName,
+            String peak,
+            String min,
+            String rmsOrAverage,
+            String timeOfPeak,
+            String note) {
+        caption.setText("Aktywny element: " + details.id());
+        propId.setText(details.id());
+        propType.setText(details.typeLabel());
+        propValue.setText(details.value());
+        propSourceType.setText(details.sourceType());
+        propFrequency.setText(details.frequency());
+        propNodeA.setText(details.nodeA());
+        propNodeB.setText(details.nodeB());
+        propOrientation.setText(details.orientation());
+        propDescription.setText(details.description());
+        simTrace.setText(traceName);
+        simPeak.setText(peak);
+        simMin.setText(min);
+        simRms.setText(rmsOrAverage);
+        simTmax.setText(timeOfPeak);
+        simNote.setText(note);
+        simulationEmptyState.setVisible(false);
+        simulationData.setVisible(true);
+    }
+
     public void showWire(WorkspaceMockService.WireDetails details) {
         caption.setText("Aktywny przewód: " + details.id());
         propId.setText(details.id());

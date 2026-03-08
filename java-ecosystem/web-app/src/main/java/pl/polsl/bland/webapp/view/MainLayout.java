@@ -8,7 +8,12 @@ import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
+import pl.polsl.bland.models.CircuitSchematic;
+import pl.polsl.bland.models.SimulationRequest;
+import pl.polsl.bland.webapp.service.BackendClient;
+import pl.polsl.bland.webapp.service.SimulationCsvService;
 import pl.polsl.bland.webapp.service.WorkspaceMockService;
+import pl.polsl.bland.webapp.service.WorkspaceExportService;
 import pl.polsl.bland.webapp.view.panel.PropertiesWindow;
 import pl.polsl.bland.webapp.view.panel.ResultsWindow;
 
@@ -22,6 +27,7 @@ import java.util.Map;
 @Route("")
 @PageTitle("Bland Circuit Simulator")
 public class MainLayout extends Div {
+    private static final String PROJECT_FILE_NAME = "filtr_rlc_lab.asc";
     private static final String ANALYSIS_TRANSIENT = "Analiza przejściowa";
     private static final String ANALYSIS_DC = "Punkt pracy DC";
     private static final double DEFAULT_ZOOM = 0.92;
@@ -31,6 +37,9 @@ public class MainLayout extends Div {
     private static final double MOVE_STEP = 16;
 
     private final WorkspaceMockService workspaceMockService;
+    private final BackendClient backendClient;
+    private final WorkspaceExportService workspaceExportService;
+    private final SimulationCsvService simulationCsvService;
     private final PropertiesWindow propertiesWindow;
     private final ResultsWindow resultsWindow;
     private final SchematicPreview schematicPreview;
@@ -76,12 +85,22 @@ public class MainLayout extends Div {
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private int historyIndex = -1;
     private ProjectSnapshot savedProjectSnapshot;
+    private SimulationCsvService.ParsedSimulation latestSimulation;
+    private String latestSimulationNetlist;
+    private String latestSimulationMessage;
     private double zoom = DEFAULT_ZOOM;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
 
-    public MainLayout(WorkspaceMockService workspaceMockService) {
+    public MainLayout(
+            WorkspaceMockService workspaceMockService,
+            BackendClient backendClient,
+            WorkspaceExportService workspaceExportService,
+            SimulationCsvService simulationCsvService) {
         this.workspaceMockService = workspaceMockService;
+        this.backendClient = backendClient;
+        this.workspaceExportService = workspaceExportService;
+        this.simulationCsvService = simulationCsvService;
         this.propertiesWindow = new PropertiesWindow();
         this.resultsWindow = new ResultsWindow();
         this.schematicPreview = new SchematicPreview(new SchematicPreview.InteractionHandler() {
@@ -200,7 +219,7 @@ public class MainLayout extends Div {
         selectedNetKey = null;
         pendingWireStart = null;
         pendingWireEndpoint = null;
-        simulationReady = false;
+        clearSimulationState();
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
         componentSearch.clear();
@@ -464,6 +483,9 @@ public class MainLayout extends Div {
     }
 
     private void recordWorkspaceChange() {
+        clearSimulationState();
+        refreshSelectionPanels();
+        updateSimulationIndicators();
         WorkspaceSnapshot snapshot = captureWorkspaceSnapshot();
         if (historyIndex >= 0 && historyIndex < workspaceHistory.size() && workspaceHistory.get(historyIndex).equals(snapshot)) {
             updateHistoryControls();
@@ -529,7 +551,7 @@ public class MainLayout extends Div {
         selectedNetKey = snapshot.selectedNetKey();
         pendingWireStart = null;
         pendingWireEndpoint = null;
-        simulationReady = snapshot.simulationReady();
+        clearSimulationState();
         propertiesWindow.setVisible(snapshot.propertiesVisible());
         resultsWindow.setVisible(snapshot.resultsVisible());
         refreshWorkspaceState();
@@ -589,7 +611,7 @@ public class MainLayout extends Div {
         selectedNetKey = snapshot.selectedNetKey();
         pendingWireStart = null;
         pendingWireEndpoint = null;
-        simulationReady = snapshot.simulationReady();
+        clearSimulationState();
         setAnalysis(snapshot.analysisLabel(), true, true);
         setActiveComponent(snapshot.activeComponent(), true);
         setActiveTool(WorkspaceTool.SELECT, true);
@@ -640,7 +662,9 @@ public class MainLayout extends Div {
         if (selectedElementId == null) {
             propertiesWindow.clear("Brak zaznaczonego elementu. Dodaj nowy komponent albo wybierz istniejący.");
             resultsWindow.clear(analysisLabel, simulationReady,
-                    "Brak aktywnego elementu. Zaznacz komponent, aby zobaczyć mockowane wyniki.");
+                    simulationReady
+                            ? "Zaznacz komponent, aby zobaczyć wyniki z ostatniej symulacji."
+                            : "Brak aktywnego elementu. Zaznacz komponent, aby zobaczyć wyniki.");
             schematicPreview.setSelectedElement(null);
             return;
         }
@@ -653,10 +677,237 @@ public class MainLayout extends Div {
         }
 
         workspaceMockService.describeElement(workspaceElements, workspaceNetTopology, element).ifPresent(details -> {
-            propertiesWindow.update(details, simulationReady);
-            resultsWindow.update(details, analysisLabel, simulationReady);
+            if (latestSimulation != null && simulationReady) {
+                showMeasuredResults(element, details);
+            } else if (!simulationReady && latestSimulationMessage != null && latestSimulationNetlist != null) {
+                propertiesWindow.update(details, false);
+                resultsWindow.showSimulation(
+                        "Aktywny element: " + details.id() + " / " + details.typeLabel(),
+                        analysisLabel,
+                        "Symulacja nie powiodła się",
+                        latestSimulationMessage + ". Sprawdź logi i netlistę poniżej.",
+                        List.of(),
+                        latestSimulationNetlist,
+                        List.of(latestSimulationMessage));
+            } else {
+                propertiesWindow.update(details, simulationReady);
+                resultsWindow.update(details, analysisLabel, simulationReady);
+            }
             schematicPreview.setSelectedElement(selectedElementId);
         });
+    }
+
+    private void showMeasuredResults(
+            WorkspaceMockService.WorkspaceElement element,
+            WorkspaceMockService.ElementDetails details) {
+        MeasuredResults measuredResults = buildMeasuredResults(element);
+        propertiesWindow.showMeasuredElement(
+                details,
+                measuredResults.primaryTraceName(),
+                measuredResults.peak(),
+                measuredResults.min(),
+                measuredResults.rmsOrAverage(),
+                measuredResults.timeOfPeak(),
+                measuredResults.summaryNote());
+        resultsWindow.showSimulation(
+                "Aktywny element: " + details.id() + " / " + details.typeLabel(),
+                analysisLabel,
+                measuredResults.plotTitle(),
+                measuredResults.plotHint(),
+                measuredResults.rows(),
+                latestSimulationNetlist == null ? details.netlist() : latestSimulationNetlist,
+                measuredResults.logs());
+    }
+
+    private MeasuredResults buildMeasuredResults(WorkspaceMockService.WorkspaceElement element) {
+        String nodeA = resolveSimulationNode(element, true);
+        String nodeB = resolveSimulationNode(element, false);
+        double[] timePoints = latestSimulation.timePoints();
+        double[] voltageA = resolveVoltageSeries(nodeA);
+        double[] voltageB = resolveVoltageSeries(nodeB);
+        double[] voltageDelta = subtractSeries(voltageA, voltageB);
+        double[] currentSeries = resolveCurrentSeries(element, timePoints);
+
+        List<WorkspaceMockService.ResultRow> rows = new ArrayList<>();
+        for (int index = 0; index < timePoints.length; index++) {
+            String note = "V(" + nodeA + ")=" + formatMeasurement(voltageA[index], "V")
+                    + ", V(" + nodeB + ")=" + formatMeasurement(voltageB[index], "V");
+            rows.add(new WorkspaceMockService.ResultRow(
+                    formatMeasurement(timePoints[index], "s"),
+                    formatMeasurement(voltageDelta[index], "V"),
+                    currentSeries == null ? "-" : formatMeasurement(currentSeries[index], "A"),
+                    note));
+        }
+
+        String voltageTrace = "ΔV(" + nodeA + "," + nodeB + ")";
+        String currentTrace = resolveCurrentTraceName(element, currentSeries);
+        String plotTitle = currentTrace == null
+                ? "Aktywny ślad: " + voltageTrace
+                : "Aktywny ślad: " + voltageTrace + " / " + currentTrace;
+        int peakIndex = indexOfMax(voltageDelta);
+        String plotHint = "Próbek: " + rows.size()
+                + ". Maks. |ΔV|: " + formatMeasurement(maxAbs(voltageDelta), "V")
+                + (currentSeries == null ? "" : " / maks. |I|: " + formatMeasurement(maxAbs(currentSeries), "A"));
+        String summaryNote = currentTrace == null
+                ? "Statystyki pokazują napięcie różnicowe elementu."
+                : "Statystyki pokazują napięcie różnicowe elementu, a prąd jest dostępny w tabeli wyników.";
+
+        List<String> logs = new ArrayList<>();
+        logs.add("Rzeczywista symulacja została uruchomiona przez backend i silnik C++.");
+        logs.add("Liczba próbek CSV: " + rows.size() + ".");
+        logs.add("Kolumny CSV: " + String.join(", ", latestSimulation.headers()) + ".");
+        logs.add("Napięcie elementu liczono jako różnicę V(" + nodeA + ") - V(" + nodeB + ").");
+        if (currentTrace == null) {
+            logs.add("Dla tego elementu silnik nie zwrócił bezpośredniego śladu prądowego.");
+        } else if (element.type() == WorkspaceMockService.ElementType.CURRENT) {
+            logs.add("Prąd źródła prądowego wyliczono z ustawień źródła w web-app.");
+        } else {
+            logs.add("Użyto śladu prądowego " + currentTrace + " zwróconego przez silnik.");
+        }
+
+        return new MeasuredResults(
+                plotTitle,
+                plotHint,
+                rows,
+                logs,
+                voltageTrace,
+                formatMeasurement(max(voltageDelta), "V"),
+                formatMeasurement(min(voltageDelta), "V"),
+                formatMeasurement(rmsOrAverage(voltageDelta), ANALYSIS_DC.equals(analysisLabel) ? "V avg" : "V rms"),
+                formatMeasurement(timePoints[peakIndex], "s"),
+                summaryNote);
+    }
+
+    private String resolveSimulationNode(WorkspaceMockService.WorkspaceElement element, boolean primary) {
+        WorkspaceMockService.PinRef pinRef = switch (element.type()) {
+            case RESISTOR, INDUCTOR, CAPACITOR -> new WorkspaceMockService.PinRef(element.id(), primary ? "A" : "B");
+            case VOLTAGE, CURRENT -> new WorkspaceMockService.PinRef(element.id(), primary ? "POS" : "NEG");
+            case GROUND -> new WorkspaceMockService.PinRef(element.id(), "REF");
+            case DIODE -> new WorkspaceMockService.PinRef(element.id(), primary ? "ANODE" : "CATHODE");
+            case OPAMP -> new WorkspaceMockService.PinRef(element.id(), primary ? "IN+" : "IN-");
+        };
+        String netKey = workspaceNetTopology.netKey(pinRef);
+        if (netKey != null && workspaceNetTopology.findNet(netKey)
+                .filter(net -> net.members().stream().anyMatch(this::isGroundPin))
+                .isPresent()) {
+            return "0";
+        }
+        return workspaceNetTopology.netName(pinRef, pinRef.elementId() + "_" + pinRef.pinKey());
+    }
+
+    private boolean isGroundPin(WorkspaceMockService.PinRef pinRef) {
+        return "REF".equals(pinRef.pinKey()) && pinRef.elementId().startsWith("GND");
+    }
+
+    private double[] resolveVoltageSeries(String nodeName) {
+        if ("0".equals(nodeName)) {
+            return latestSimulation.zeroSeries();
+        }
+        double[] series = latestSimulation.seriesOrNull("V(" + nodeName + ")");
+        return series == null ? latestSimulation.zeroSeries() : series;
+    }
+
+    private double[] resolveCurrentSeries(WorkspaceMockService.WorkspaceElement element, double[] timePoints) {
+        if (element.type() == WorkspaceMockService.ElementType.VOLTAGE) {
+            return latestSimulation.seriesOrNull("I(" + element.id() + ")");
+        }
+        if (element.type() != WorkspaceMockService.ElementType.CURRENT) {
+            return null;
+        }
+
+        double amplitude;
+        try {
+            amplitude = Double.parseDouble(element.value());
+        } catch (NumberFormatException exception) {
+            return null;
+        }
+
+        double[] series = new double[timePoints.length];
+        if (WorkspaceMockService.SOURCE_TYPE_SINE.equals(WorkspaceMockService.normalizeSourceType(element.sourceType()))
+                && element.frequency() != null) {
+            for (int index = 0; index < timePoints.length; index++) {
+                series[index] = amplitude * Math.sin(2.0 * Math.PI * element.frequency() * timePoints[index]);
+            }
+            return series;
+        }
+
+        for (int index = 0; index < timePoints.length; index++) {
+            series[index] = amplitude;
+        }
+        return series;
+    }
+
+    private String resolveCurrentTraceName(WorkspaceMockService.WorkspaceElement element, double[] currentSeries) {
+        if (currentSeries == null) {
+            return null;
+        }
+        return element.type() == WorkspaceMockService.ElementType.CURRENT
+                ? "I(" + element.id() + ") [wyliczone]"
+                : "I(" + element.id() + ")";
+    }
+
+    private double[] subtractSeries(double[] first, double[] second) {
+        double[] result = new double[first.length];
+        for (int index = 0; index < first.length; index++) {
+            result[index] = first[index] - second[index];
+        }
+        return result;
+    }
+
+    private double maxAbs(double[] values) {
+        double max = 0;
+        for (double value : values) {
+            max = Math.max(max, Math.abs(value));
+        }
+        return max;
+    }
+
+    private double max(double[] values) {
+        double max = Double.NEGATIVE_INFINITY;
+        for (double value : values) {
+            max = Math.max(max, value);
+        }
+        return max;
+    }
+
+    private double min(double[] values) {
+        double min = Double.POSITIVE_INFINITY;
+        for (double value : values) {
+            min = Math.min(min, value);
+        }
+        return min;
+    }
+
+    private int indexOfMax(double[] values) {
+        int maxIndex = 0;
+        for (int index = 1; index < values.length; index++) {
+            if (values[index] > values[maxIndex]) {
+                maxIndex = index;
+            }
+        }
+        return maxIndex;
+    }
+
+    private double rmsOrAverage(double[] values) {
+        if (values.length == 0) {
+            return 0;
+        }
+        if (ANALYSIS_DC.equals(analysisLabel)) {
+            double sum = 0;
+            for (double value : values) {
+                sum += value;
+            }
+            return sum / values.length;
+        }
+        double sumSquares = 0;
+        for (double value : values) {
+            sumSquares += value * value;
+        }
+        return Math.sqrt(sumSquares / values.length);
+    }
+
+    private String formatMeasurement(double value, String unit) {
+        return String.format(Locale.US, "%.6g %s", value, unit);
     }
 
     private void showWireSelection(String wireId) {
@@ -713,12 +964,37 @@ public class MainLayout extends Div {
             return;
         }
 
-        simulationReady = true;
-        resultsWindow.setVisible(true);
-        resultsWindow.setActiveTab(ResultsWindow.ResultTab.SUMMARY);
-        refreshSelectionPanels();
-        updateSimulationIndicators();
-        statusMessageValue.setText("Mockowana symulacja zakończona dla: " + analysisLabel + ".");
+        try {
+            var resolvedWires = workspaceMockService.resolveWires(workspaceElements, workspaceWires.values());
+            CircuitSchematic schematic = workspaceExportService.exportSchematic(
+                    PROJECT_FILE_NAME,
+                    workspaceElements,
+                    resolvedWires,
+                    workspaceNetTopology);
+            CircuitSchematic storedSchematic = backendClient.saveSchematic(schematic);
+            SimulationRequest request = new SimulationRequest(
+                    storedSchematic.id(),
+                    resolveAnalysisType(),
+                    resolveAnalysisParameters());
+            latestSimulationNetlist = workspaceExportService.buildEngineNetlist(storedSchematic, request);
+            latestSimulation = simulationCsvService.parse(backendClient.runSimulationCsv(request));
+            simulationReady = true;
+            latestSimulationMessage = null;
+            resultsWindow.setVisible(true);
+            resultsWindow.setActiveTab(ResultsWindow.ResultTab.SUMMARY);
+            refreshSelectionPanels();
+            updateSimulationIndicators();
+            statusMessageValue.setText("Symulacja zakończona dla: " + analysisLabel + ".");
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            latestSimulation = null;
+            simulationReady = false;
+            latestSimulationMessage = exception.getMessage();
+            resultsWindow.setVisible(true);
+            resultsWindow.setActiveTab(ResultsWindow.ResultTab.LOGS);
+            refreshSelectionPanels();
+            updateSimulationIndicators();
+            statusMessageValue.setText(exception.getMessage());
+        }
     }
 
     private void toggleResultsWindow(boolean visible) {
@@ -731,8 +1007,22 @@ public class MainLayout extends Div {
         }
     }
 
+    private SimulationRequest.AnalysisType resolveAnalysisType() {
+        return ANALYSIS_DC.equals(analysisLabel)
+                ? SimulationRequest.AnalysisType.DC
+                : SimulationRequest.AnalysisType.TRANSIENT;
+    }
+
+    private Map<String, Double> resolveAnalysisParameters() {
+        return workspaceExportService.defaultParameters(resolveAnalysisType());
+    }
+
     private void setAnalysis(String nextAnalysis, boolean silent, boolean syncSelect) {
+        boolean analysisChanged = !nextAnalysis.equals(analysisLabel);
         analysisLabel = nextAnalysis;
+        if (analysisChanged) {
+            clearSimulationState();
+        }
         if (syncSelect) {
             suppressAnalysisEvents = true;
             analysisSelect.setValue(nextAnalysis);
@@ -830,8 +1120,15 @@ public class MainLayout extends Div {
         } else {
             simulationBadgeDot.addClassName("is-idle");
             simulationBadgeText.setText("Brak wyników");
-            statusSimulationValue.setText("Brak uruchomienia");
+            statusSimulationValue.setText(latestSimulationMessage == null ? "Brak uruchomienia" : latestSimulationMessage);
         }
+    }
+
+    private void clearSimulationState() {
+        latestSimulation = null;
+        latestSimulationNetlist = null;
+        latestSimulationMessage = null;
+        simulationReady = false;
     }
 
     private void applySelectedElementValue() {
@@ -1674,6 +1971,19 @@ public class MainLayout extends Div {
             return Long.toString(Math.round(frequency));
         }
         return Double.toString(frequency);
+    }
+
+    private record MeasuredResults(
+            String plotTitle,
+            String plotHint,
+            List<WorkspaceMockService.ResultRow> rows,
+            List<String> logs,
+            String primaryTraceName,
+            String peak,
+            String min,
+            String rmsOrAverage,
+            String timeOfPeak,
+            String summaryNote) {
     }
 
     private record WorkspaceSnapshot(

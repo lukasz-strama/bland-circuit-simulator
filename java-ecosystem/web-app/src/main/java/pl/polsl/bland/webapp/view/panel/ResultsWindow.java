@@ -99,6 +99,29 @@ public final class ResultsWindow extends Div {
         resultsGrid.setVisible(false);
     }
 
+    public void showSimulation(
+            String captionText,
+            String analysisLabel,
+            String plotTitleText,
+            String plotHintText,
+            List<WorkspaceMockService.ResultRow> rows,
+            String netlist,
+            List<String> logs) {
+        caption.setText(captionText);
+        analysisBadge.setText(analysisLabel);
+        plotTitle.setText(plotTitleText);
+        plotHint.setText(plotHintText);
+        netlistBox.setText(netlist);
+        resultsGrid.setItems(rows);
+        logList.removeAll();
+        logs.forEach(line -> logList.add(new Div(new Text(line))));
+        summaryPlaceholder.setText(rows.isEmpty()
+                ? plotHintText
+                : "Dane pochodzą z ostatniej symulacji uruchomionej z poziomu web-app.");
+        summaryPlaceholder.setVisible(rows.isEmpty());
+        resultsGrid.setVisible(!rows.isEmpty());
+    }
+
     public void setCloseHandler(Runnable closeHandler) {
         this.closeHandler = closeHandler == null ? () -> {} : closeHandler;
     }
