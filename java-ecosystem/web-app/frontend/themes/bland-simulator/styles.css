@@ -565,8 +565,32 @@ vaadin-text-field.component-search {
   gap: 8px;
 }
 
+.plot-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .plot-title {
   font-weight: 600;
+}
+
+.plot-trace-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.plot-trace-group .toolbar-label {
+  margin-right: 2px;
+}
+
+vaadin-select.trace-select {
+  width: min(320px, 52vw);
+  min-width: 180px;
 }
 
 .waveform-meta {

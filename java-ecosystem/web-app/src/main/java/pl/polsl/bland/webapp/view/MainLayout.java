@@ -715,12 +715,9 @@ public class MainLayout extends Div {
                 resultsWindow.showSimulation(
                         "Aktywny element: " + details.id() + " / " + details.typeLabel(),
                         analysisLabel,
-                        "Symulacja nie powiodła się",
-                        latestSimulationMessage + ". Sprawdź logi i netlistę poniżej.",
+                        List.of(),
                         List.of(),
                         null,
-                        null,
-                        "V",
                         latestSimulationNetlist,
                         List.of(latestSimulationMessage));
             } else {
@@ -746,12 +743,9 @@ public class MainLayout extends Div {
         resultsWindow.showSimulation(
                 "Aktywny element: " + details.id() + " / " + details.typeLabel(),
                 analysisLabel,
-                measuredResults.plotTitle(),
-                measuredResults.plotHint(),
                 measuredResults.rows(),
-                measuredResults.plotXValues(),
-                measuredResults.plotYValues(),
-                measuredResults.plotUnit(),
+                measuredResults.plotTraces(),
+                measuredResults.preferredTraceKey(),
                 latestSimulationNetlist == null ? details.netlist() : latestSimulationNetlist,
                 measuredResults.logs());
     }
@@ -778,13 +772,7 @@ public class MainLayout extends Div {
 
         String voltageTrace = "ΔV(" + nodeA + "," + nodeB + ")";
         String currentTrace = resolveCurrentTraceName(element, currentSeries);
-        String plotTitle = currentTrace == null
-                ? "Aktywny ślad: " + voltageTrace
-                : "Aktywny ślad: " + voltageTrace + " / " + currentTrace;
         int peakIndex = indexOfMax(voltageDelta);
-        String plotHint = "Próbek: " + rows.size()
-                + ". Maks. |ΔV|: " + formatMeasurement(maxAbs(voltageDelta), "V")
-                + (currentSeries == null ? "" : " / maks. |I|: " + formatMeasurement(maxAbs(currentSeries), "A"));
         String summaryNote = currentTrace == null
                 ? "Statystyki pokazują napięcie różnicowe elementu."
                 : "Statystyki pokazują napięcie różnicowe elementu, a prąd jest dostępny w tabeli wyników.";
@@ -802,20 +790,135 @@ public class MainLayout extends Div {
             logs.add("Użyto śladu prądowego " + currentTrace + " zwróconego przez silnik.");
         }
 
+        List<ResultsWindow.PlotTrace> plotTraces = buildPlotTraces(
+                element,
+                nodeA,
+                nodeB,
+                timePoints,
+                voltageA,
+                voltageB,
+                voltageDelta,
+                currentSeries,
+                rows.size());
+        String preferredTraceKey = plotTraces.isEmpty() ? null : plotTraces.get(0).key();
+
         return new MeasuredResults(
-                plotTitle,
-                plotHint,
                 rows,
                 logs,
-                timePoints,
-                voltageDelta,
-                "V",
+                plotTraces,
+                preferredTraceKey,
                 voltageTrace,
                 formatMeasurement(max(voltageDelta), "V"),
                 formatMeasurement(min(voltageDelta), "V"),
                 formatMeasurement(rmsOrAverage(voltageDelta), ANALYSIS_DC.equals(analysisLabel) ? "V avg" : "V rms"),
                 formatMeasurement(timePoints[peakIndex], "s"),
                 summaryNote);
+    }
+
+    private List<ResultsWindow.PlotTrace> buildPlotTraces(
+            WorkspaceMockService.WorkspaceElement element,
+            String nodeA,
+            String nodeB,
+            double[] timePoints,
+            double[] voltageA,
+            double[] voltageB,
+            double[] voltageDelta,
+            double[] currentSeries,
+            int sampleCount) {
+        LinkedHashMap<String, ResultsWindow.PlotTrace> traces = new LinkedHashMap<>();
+
+        String deltaTraceLabel = "ΔV(" + nodeA + "," + nodeB + ")";
+        addPlotTrace(
+                traces,
+                "delta:" + element.id(),
+                deltaTraceLabel,
+                "Aktywny ślad: " + deltaTraceLabel,
+                "Próbek: " + sampleCount + ". Napięcie różnicowe aktywnego elementu.",
+                timePoints,
+                voltageDelta,
+                "V");
+
+        if (currentSeries != null) {
+            String currentTrace = resolveCurrentTraceName(element, currentSeries);
+            addPlotTrace(
+                    traces,
+                    latestSimulation.hasSeries("I(" + element.id() + ")") ? "I(" + element.id() + ")" : "calc:I(" + element.id() + ")",
+                    currentTrace,
+                    "Aktywny ślad: " + currentTrace,
+                    latestSimulation.hasSeries("I(" + element.id() + ")")
+                            ? "Próbek: " + sampleCount + ". Prąd elementu zwrócony przez silnik."
+                            : "Próbek: " + sampleCount + ". Prąd źródła wyliczony po stronie web-app.",
+                    timePoints,
+                    currentSeries,
+                    "A");
+        }
+
+        addRawVoltageTrace(traces, nodeA, timePoints, voltageA, sampleCount);
+        if (!nodeB.equals(nodeA)) {
+            addRawVoltageTrace(traces, nodeB, timePoints, voltageB, sampleCount);
+        }
+
+        for (String header : latestSimulation.headers()) {
+            if ("time".equalsIgnoreCase(header)) {
+                continue;
+            }
+            double[] series = latestSimulation.seriesOrNull(header);
+            if (series == null) {
+                continue;
+            }
+            addPlotTrace(
+                    traces,
+                    header,
+                    header,
+                    "Aktywny ślad: " + header,
+                    "Próbek: " + sampleCount + ". Surowy ślad zwrócony przez backend/silnik.",
+                    timePoints,
+                    series,
+                    resolvePlotUnit(header));
+        }
+
+        return List.copyOf(traces.values());
+    }
+
+    private void addRawVoltageTrace(
+            LinkedHashMap<String, ResultsWindow.PlotTrace> traces,
+            String nodeName,
+            double[] timePoints,
+            double[] voltageSeries,
+            int sampleCount) {
+        if ("0".equals(nodeName)) {
+            return;
+        }
+
+        String traceName = "V(" + nodeName + ")";
+        addPlotTrace(
+                traces,
+                traceName,
+                traceName,
+                "Aktywny ślad: " + traceName,
+                "Próbek: " + sampleCount + ". Napięcie węzła aktywnego elementu.",
+                timePoints,
+                voltageSeries,
+                "V");
+    }
+
+    private void addPlotTrace(
+            LinkedHashMap<String, ResultsWindow.PlotTrace> traces,
+            String key,
+            String label,
+            String title,
+            String hint,
+            double[] xValues,
+            double[] yValues,
+            String unit) {
+        if (traces.containsKey(key) || xValues == null || yValues == null) {
+            return;
+        }
+        traces.put(key, new ResultsWindow.PlotTrace(key, label, title, hint, xValues, yValues, unit));
+    }
+
+    private String resolvePlotUnit(String traceName) {
+        return traceName.startsWith("I(") ? "A" : "V";
     }
 
     private String resolveSimulationNode(WorkspaceMockService.WorkspaceElement element, boolean primary) {
@@ -2127,13 +2230,10 @@ public class MainLayout extends Div {
     }
 
     private record MeasuredResults(
-            String plotTitle,
-            String plotHint,
             List<WorkspaceMockService.ResultRow> rows,
             List<String> logs,
-            double[] plotXValues,
-            double[] plotYValues,
-            String plotUnit,
+            List<ResultsWindow.PlotTrace> plotTraces,
+            String preferredTraceKey,
             String primaryTraceName,
             String peak,
             String min,

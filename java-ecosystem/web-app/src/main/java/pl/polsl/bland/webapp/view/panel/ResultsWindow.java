@@ -8,9 +8,11 @@ import com.vaadin.flow.component.grid.GridVariant;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
+import com.vaadin.flow.component.select.Select;
 import pl.polsl.bland.webapp.service.WorkspaceMockService;
 
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -41,6 +43,7 @@ public final class ResultsWindow extends Div {
     private final Div summaryPlaceholder = new Div();
     private final Div plotHint = new Div();
     private final Div plotMeta = new Div();
+    private final Select<String> traceSelect = new Select<>();
     private final Div plotViewport = new Div();
     private final Div plotEmptyState = new Div();
     private final Svg waveformSvg = new Svg();
@@ -48,12 +51,14 @@ public final class ResultsWindow extends Div {
     private final Div logList = new Div();
     private final Map<ResultTab, Div> tabButtons = new EnumMap<>(ResultTab.class);
     private final Map<ResultTab, Div> tabPanels = new EnumMap<>(ResultTab.class);
+    private final LinkedHashMap<String, PlotTrace> availableTraces = new LinkedHashMap<>();
     private Runnable closeHandler = () -> {};
     private ResultTab activeTab = ResultTab.SUMMARY;
 
     public ResultsWindow() {
         addClassNames("floating-window", "is-results-window");
         configureResultsGrid();
+        configureTraceSelect();
         closeButton.addClickListener(event -> closeHandler.run());
         add(buildTitleBar(), buildBody());
         setActiveTab(ResultTab.SUMMARY);
@@ -64,6 +69,7 @@ public final class ResultsWindow extends Div {
         analysisBadge.setText(analysisLabel);
         plotTitle.setText("Aktywny ślad: brak");
         plotHint.setText(message);
+        clearAvailableTraces();
         clearPlot(message);
         netlistBox.setText("* Zaznacz element, aby zobaczyć mockowaną netlistę.");
         resultsGrid.setItems(List.of());
@@ -83,6 +89,7 @@ public final class ResultsWindow extends Div {
         plotHint.setText(simulationReady
                 ? details.simulationNote()
                 : "Uruchom symulację, aby odblokować przebiegi i statystyki dla " + details.id() + ".");
+        clearAvailableTraces();
         clearPlot(simulationReady
                 ? "Ten widok dla mockowanych wynikow nie rysuje jeszcze osobnego przebiegu."
                 : "Uruchom symulacje, aby narysowac przebieg.");
@@ -100,6 +107,7 @@ public final class ResultsWindow extends Div {
         analysisBadge.setText(analysisLabel);
         plotTitle.setText("Połączenie: " + details.startPin() + " -> " + details.endPin());
         plotHint.setText("Przewody nie generują osobnego śladu. Użyj widoku netlisty albo logów, aby prześledzić połączenie.");
+        clearAvailableTraces();
         clearPlot("Przewody nie maja osobnego przebiegu.");
         netlistBox.setText(details.netlist());
         resultsGrid.setItems(List.of());
@@ -113,25 +121,20 @@ public final class ResultsWindow extends Div {
     public void showSimulation(
             String captionText,
             String analysisLabel,
-            String plotTitleText,
-            String plotHintText,
             List<WorkspaceMockService.ResultRow> rows,
-            double[] plotXValues,
-            double[] plotYValues,
-            String plotUnit,
+            List<PlotTrace> plotTraces,
+            String preferredTraceKey,
             String netlist,
             List<String> logs) {
         caption.setText(captionText);
         analysisBadge.setText(analysisLabel);
-        plotTitle.setText(plotTitleText);
-        plotHint.setText(plotHintText);
-        renderPlot(plotXValues, plotYValues, plotUnit);
+        setAvailableTraces(plotTraces, preferredTraceKey);
         netlistBox.setText(netlist);
         resultsGrid.setItems(rows);
         logList.removeAll();
         logs.forEach(line -> logList.add(new Div(new Text(line))));
         summaryPlaceholder.setText(rows.isEmpty()
-                ? plotHintText
+                ? resolveSummaryPlaceholder(plotTraces)
                 : "Dane pochodzą z ostatniej symulacji uruchomionej z poziomu web-app.");
         summaryPlaceholder.setVisible(rows.isEmpty());
         resultsGrid.setVisible(!rows.isEmpty());
@@ -209,12 +212,28 @@ public final class ResultsWindow extends Div {
         plotTitle.addClassName("plot-title");
         plotHint.addClassName("hint-box");
         plotMeta.addClassName("waveform-meta");
+        traceSelect.addClassName("trace-select");
         plotViewport.addClassName("plot-viewport");
         plotEmptyState.addClassNames("hint-box", "plot-empty-state");
         waveformSvg.addClassName("waveform-svg");
         plotViewport.add(waveformSvg);
-        plotBox.add(plotTitle, plotHint, plotMeta, plotViewport, plotEmptyState);
+        plotBox.add(buildPlotToolbar(), plotHint, plotMeta, plotViewport, plotEmptyState);
         return plotBox;
+    }
+
+    private Component buildPlotToolbar() {
+        Div toolbar = new Div();
+        toolbar.addClassName("plot-toolbar");
+
+        Span traceLabel = new Span("Ślad");
+        traceLabel.addClassName("toolbar-label");
+
+        Div traceGroup = new Div();
+        traceGroup.addClassName("plot-trace-group");
+        traceGroup.add(traceLabel, traceSelect);
+
+        toolbar.add(plotTitle, traceGroup);
+        return toolbar;
     }
 
     private Component buildNetlistPanel() {
@@ -253,6 +272,72 @@ public final class ResultsWindow extends Div {
         resultsGrid.addColumn(WorkspaceMockService.ResultRow::voltage).setHeader("Napięcie").setAutoWidth(true).setFlexGrow(0);
         resultsGrid.addColumn(WorkspaceMockService.ResultRow::current).setHeader("Prąd").setAutoWidth(true).setFlexGrow(0);
         resultsGrid.addColumn(WorkspaceMockService.ResultRow::note).setHeader("Uwagi").setFlexGrow(1);
+    }
+
+    private void configureTraceSelect() {
+        traceSelect.setEnabled(false);
+        traceSelect.setItemLabelGenerator(key -> {
+            PlotTrace trace = availableTraces.get(key);
+            return trace == null ? key : trace.label();
+        });
+        traceSelect.addValueChangeListener(event -> {
+            if (event.getValue() != null) {
+                renderSelectedTrace(event.getValue());
+            }
+        });
+    }
+
+    private void setAvailableTraces(List<PlotTrace> plotTraces, String preferredTraceKey) {
+        availableTraces.clear();
+        if (plotTraces != null) {
+            plotTraces.forEach(trace -> availableTraces.put(trace.key(), trace));
+        }
+
+        if (availableTraces.isEmpty()) {
+            clearAvailableTraces();
+            plotTitle.setText("Aktywny ślad: brak");
+            plotHint.setText("Brak danych do narysowania przebiegu.");
+            clearPlot("Brak danych do narysowania przebiegu.");
+            return;
+        }
+
+        List<String> keys = List.copyOf(availableTraces.keySet());
+        traceSelect.setItems(keys);
+        traceSelect.setEnabled(keys.size() > 1);
+
+        String selectedKey = preferredTraceKey != null && availableTraces.containsKey(preferredTraceKey)
+                ? preferredTraceKey
+                : keys.get(0);
+        traceSelect.setValue(selectedKey);
+        renderSelectedTrace(selectedKey);
+    }
+
+    private void clearAvailableTraces() {
+        availableTraces.clear();
+        traceSelect.clear();
+        traceSelect.setItems(List.of());
+        traceSelect.setEnabled(false);
+    }
+
+    private void renderSelectedTrace(String traceKey) {
+        PlotTrace trace = availableTraces.get(traceKey);
+        if (trace == null) {
+            plotTitle.setText("Aktywny ślad: brak");
+            plotHint.setText("Wybrany ślad nie jest dostępny w bieżących wynikach.");
+            clearPlot("Wybrany ślad nie jest dostępny.");
+            return;
+        }
+
+        plotTitle.setText(trace.title());
+        plotHint.setText(trace.hint());
+        renderPlot(trace.xValues(), trace.yValues(), trace.unit());
+    }
+
+    private String resolveSummaryPlaceholder(List<PlotTrace> plotTraces) {
+        if (plotTraces == null || plotTraces.isEmpty()) {
+            return "Brak wyników dla bieżącej symulacji.";
+        }
+        return "Brak tabelarycznych wyników dla tego widoku, ale dostępne są ślady w zakładce „Przebiegi”.";
     }
 
     private void clearPlot(String message) {
@@ -387,5 +472,15 @@ public final class ResultsWindow extends Div {
         } else {
             component.removeClassName(className);
         }
+    }
+
+    public record PlotTrace(
+            String key,
+            String label,
+            String title,
+            String hint,
+            double[] xValues,
+            double[] yValues,
+            String unit) {
     }
 }
