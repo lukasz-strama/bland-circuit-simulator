@@ -408,6 +408,24 @@ public class MainLayout extends Div {
         statusMessageValue.setText("Przesunięto " + selectedElementId + " " + directionLabel + ".");
     }
 
+    private void rotateSelectedElement() {
+        if (selectedElementId == null || selectedWireId != null) {
+            statusMessageValue.setText("Najpierw zaznacz element do obrotu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        workspaceElements.put(selectedElementId, workspaceMockService.rotateElement(element));
+        refreshWorkspaceState();
+        recordWorkspaceChange();
+        statusMessageValue.setText("Obrócono " + selectedElementId + " o 90°.");
+    }
+
     private void handleElementDragStart(String elementId, double canvasX, double canvasY) {
         if (activeTool != WorkspaceTool.SELECT) {
             return;
@@ -2107,6 +2125,9 @@ public class MainLayout extends Div {
         Span resetElementValue = createAction("Domyślna", "mini-button");
         resetElementValue.addClickListener(event -> resetSelectedElementValue());
 
+        Span rotateElement = createAction("Obróć", "mini-button");
+        rotateElement.addClickListener(event -> rotateSelectedElement());
+
         Span applySourceSettings = createAction("Ustaw", "mini-button");
         applySourceSettings.addClickListener(event -> applySelectedSourceSettings());
 
@@ -2155,7 +2176,7 @@ public class MainLayout extends Div {
 
         Span help = createAction("?", "icon-button");
         help.addClickListener(event -> statusMessageValue.setText(
-                "Zaznacz element, aby go przesuwać. Zaznacz przewód, aby przepiąć jego początek lub koniec."));
+                "Zaznacz element, aby go przesuwać lub obracać. Zaznacz przewód, aby przepiąć jego początek lub koniec."));
 
         primaryRow.add(buildToolbarGroup(
                 newProject,
@@ -2179,6 +2200,7 @@ public class MainLayout extends Div {
         primaryRow.add(buildToolbarGroup(
                 createLabel("Element"),
                 selectedElementReadout,
+                rotateElement,
                 elementValueField,
                 applyElementValue,
                 resetElementValue));

@@ -268,8 +268,8 @@ public final class SchematicPreview extends Div {
     }
 
     private Component createResistor(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(0, 0, 220, 94),
                 line("component-line", 22, 48, 38, 48),
                 line("component-line", 38, 48, 58, 28),
@@ -284,12 +284,12 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "B", 198, 48),
                 text("component-label", 92, 4, element.id()),
                 text("component-value", 68, 82, element.value()));
-        return part;
+        return frame.part();
     }
 
     private Component createInductor(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(0, 0, 248, 94),
                 line("component-line", 22, 48, 40, 48),
                 loop(40, 29, 38),
@@ -301,12 +301,12 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "B", 226, 48),
                 text("component-label", 110, 4, element.id()),
                 text("component-value", 92, 82, element.value()));
-        return part;
+        return frame.part();
     }
 
     private Component createCapacitor(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(0, 0, 96, 234),
                 line("component-line", 48, 46, 48, 92),
                 line("component-line", 28, 92, 68, 92),
@@ -316,12 +316,12 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "B", 48, 190),
                 text("component-label", 110, 108, element.id()),
                 text("component-value", 110, 126, element.value()));
-        return part;
+        return frame.part();
     }
 
     private Component createVoltageSource(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(22, 0, 104, 272),
                 line("component-line", 74, 46, 74, 92),
                 circle("component-circle", 34, 92, 80),
@@ -339,12 +339,12 @@ public final class SchematicPreview extends Div {
                 text("component-label", 42, 4, element.id()),
                 text("component-value", 12, 280, element.value() + " V"),
                 text("component-value is-secondary", 26, 300, sourceModeLabel(element)));
-        return part;
+        return frame.part();
     }
 
     private Component createCurrentSource(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(22, 0, 104, 272),
                 line("component-line", 74, 46, 74, 92),
                 circle("component-circle", 34, 92, 80),
@@ -357,12 +357,12 @@ public final class SchematicPreview extends Div {
                 text("component-label", 42, 4, element.id()),
                 text("component-value", 10, 280, formatCurrentValue(element)),
                 text("component-value is-secondary", 26, 300, sourceModeLabel(element)));
-        return part;
+        return frame.part();
     }
 
     private Component createGround(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(0, 0, 96, 80),
                 line("component-line", 46, 6, 46, 28),
                 line("component-line", 18, 28, 74, 28),
@@ -371,12 +371,12 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "REF", 46, 6),
                 text("component-label", 10, 74, element.id()),
                 text("component-value", 8, 90, element.value()));
-        return part;
+        return frame.part();
     }
 
     private Component createDiode(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(0, 0, 180, 94),
                 line("component-line", 18, 48, 52, 48),
                 line("component-line", 128, 48, 162, 48),
@@ -386,12 +386,12 @@ public final class SchematicPreview extends Div {
                 pin(element.id(), "CATHODE", 162, 48),
                 text("component-label", 70, 4, element.id()),
                 text("component-value", 56, 82, element.value()));
-        return part;
+        return frame.part();
     }
 
     private Component createOpAmp(WorkspaceMockService.WorkspaceElement element) {
-        Div part = part(element);
-        part.add(
+        PartFrame frame = part(element);
+        frame.content().add(
                 halo(0, 0, 220, 148),
                 triangle("component-opamp-body", 48, 18, 112, 112),
                 line("component-line", 0, 54, 48, 54),
@@ -404,7 +404,7 @@ public final class SchematicPreview extends Div {
                 text("component-marker", 18, 84, "-"),
                 text("component-label", 70, 0, element.id()),
                 text("component-value", 64, 136, element.value()));
-        return part;
+        return frame.part();
     }
 
     private Component createWireAssembly(WorkspaceMockService.ResolvedWire wire) {
@@ -425,11 +425,22 @@ public final class SchematicPreview extends Div {
         return label;
     }
 
-    private Div part(WorkspaceMockService.WorkspaceElement element) {
-        Div part = area("schematic-part", element.left(), element.top(), element.type().width(), element.type().height());
+    private PartFrame part(WorkspaceMockService.WorkspaceElement element) {
+        Div part = area(
+                "schematic-part",
+                element.left(),
+                element.top(),
+                element.type().orientedWidth(element.orientation()),
+                element.type().orientedHeight(element.orientation()));
         part.getElement().setAttribute("data-element-id", element.id());
+        Div content = area("schematic-part-content", 0, 0, element.type().width(), element.type().height());
+        content.getStyle()
+                .set("left", "50%")
+                .set("top", "50%")
+                .set("transform", "translate(-50%, -50%) rotate(" + element.orientation().degrees() + "deg)");
+        part.add(content);
         selectableParts.put(element.id(), part);
-        return part;
+        return new PartFrame(part, content);
     }
 
     private Div pin(String elementId, String pinKey, double centerX, double centerY) {
@@ -532,6 +543,9 @@ public final class SchematicPreview extends Div {
 
     private static String formatCurrentValue(WorkspaceMockService.WorkspaceElement element) {
         return element.value() + " A";
+    }
+
+    private record PartFrame(Div part, Div content) {
     }
 
     public interface InteractionHandler {

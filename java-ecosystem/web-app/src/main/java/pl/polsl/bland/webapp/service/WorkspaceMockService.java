@@ -287,14 +287,16 @@ public class WorkspaceMockService {
     public WorkspaceElement createElement(Collection<WorkspaceElement> existingElements, ElementType type, double canvasX, double canvasY) {
         int nextSequence = nextSequence(existingElements, type);
         String nextId = buildElementId(type, nextSequence);
-        double left = clamp(snap(canvasX - type.width() / 2), GRID_LEFT, GRID_RIGHT - type.width());
-        double top = clamp(snap(canvasY - type.height() / 2), GRID_TOP, GRID_BOTTOM - type.height());
+        Orientation orientation = Orientation.DEG_0;
+        double left = clamp(snap(canvasX - type.orientedWidth(orientation) / 2), GRID_LEFT, GRID_RIGHT - type.orientedWidth(orientation));
+        double top = clamp(snap(canvasY - type.orientedHeight(orientation) / 2), GRID_TOP, GRID_BOTTOM - type.orientedHeight(orientation));
         String sourceType = defaultSourceType(type);
         return new WorkspaceElement(
                 nextId,
                 type,
                 left,
                 top,
+                orientation,
                 defaultValue(type),
                 sourceType,
                 defaultFrequency(type, sourceType));
@@ -344,13 +346,35 @@ public class WorkspaceMockService {
     }
 
     public WorkspaceElement moveElement(WorkspaceElement element, double deltaX, double deltaY) {
-        double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().width());
-        double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().height());
+        double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().orientedWidth(element.orientation()));
+        double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().orientedHeight(element.orientation()));
         return new WorkspaceElement(
                 element.id(),
                 element.type(),
                 left,
                 top,
+                element.orientation(),
+                element.value(),
+                element.sourceType(),
+                element.frequency());
+    }
+
+    public WorkspaceElement rotateElement(WorkspaceElement element) {
+        Orientation nextOrientation = element.orientation().next();
+        double currentWidth = element.type().orientedWidth(element.orientation());
+        double currentHeight = element.type().orientedHeight(element.orientation());
+        double nextWidth = element.type().orientedWidth(nextOrientation);
+        double nextHeight = element.type().orientedHeight(nextOrientation);
+        double centerX = element.left() + currentWidth / 2;
+        double centerY = element.top() + currentHeight / 2;
+        double left = clamp(snap(centerX - nextWidth / 2), GRID_LEFT, GRID_RIGHT - nextWidth);
+        double top = clamp(snap(centerY - nextHeight / 2), GRID_TOP, GRID_BOTTOM - nextHeight);
+        return new WorkspaceElement(
+                element.id(),
+                element.type(),
+                left,
+                top,
+                nextOrientation,
                 element.value(),
                 element.sourceType(),
                 element.frequency());
@@ -362,6 +386,7 @@ public class WorkspaceMockService {
                 element.type(),
                 element.left(),
                 element.top(),
+                element.orientation(),
                 normalizeValue(element.type(), value),
                 element.sourceType(),
                 element.frequency());
@@ -386,6 +411,7 @@ public class WorkspaceMockService {
                 element.type(),
                 element.left(),
                 element.top(),
+                element.orientation(),
                 element.value(),
                 normalizedType,
                 frequency);
@@ -402,6 +428,7 @@ public class WorkspaceMockService {
                 element.type(),
                 element.left(),
                 element.top(),
+                element.orientation(),
                 element.value(),
                 normalizedType,
                 SOURCE_TYPE_SINE.equals(normalizedType)
@@ -603,6 +630,7 @@ public class WorkspaceMockService {
                 type,
                 left,
                 top,
+                Orientation.DEG_0,
                 defaultValue(type),
                 sourceType,
                 defaultFrequency(type, sourceType));
@@ -725,13 +753,33 @@ public class WorkspaceMockService {
             return path;
         }
 
-        double midX = snap((start.x() + end.x()) / 2.0);
-        if (sameCoordinate(midX, start.x()) || sameCoordinate(midX, end.x())) {
-            midX = snap(start.x() + (end.x() >= start.x() ? GRID_STEP * 2 : -GRID_STEP * 2));
+        WirePoint startLead = leadPoint(start);
+        WirePoint endLead = leadPoint(end);
+        appendPoint(path, startLead);
+
+        if (sameAxis(startLead, endLead)) {
+            appendPoint(path, endLead);
+            appendPoint(path, new WirePoint(end.x(), end.y()));
+            return path;
         }
 
-        appendPoint(path, new WirePoint(midX, start.y()));
-        appendPoint(path, new WirePoint(midX, end.y()));
+        if (start.direction().isHorizontal()) {
+            double midX = snap((startLead.x() + endLead.x()) / 2.0);
+            if (sameCoordinate(midX, startLead.x()) || sameCoordinate(midX, endLead.x())) {
+                midX = snap(startLead.x() + (endLead.x() >= startLead.x() ? GRID_STEP * 2 : -GRID_STEP * 2));
+            }
+            appendPoint(path, new WirePoint(midX, startLead.y()));
+            appendPoint(path, new WirePoint(midX, endLead.y()));
+        } else {
+            double midY = snap((startLead.y() + endLead.y()) / 2.0);
+            if (sameCoordinate(midY, startLead.y()) || sameCoordinate(midY, endLead.y())) {
+                midY = snap(startLead.y() + (endLead.y() >= startLead.y() ? GRID_STEP * 2 : -GRID_STEP * 2));
+            }
+            appendPoint(path, new WirePoint(startLead.x(), midY));
+            appendPoint(path, new WirePoint(endLead.x(), midY));
+        }
+
+        appendPoint(path, endLead);
         appendPoint(path, new WirePoint(end.x(), end.y()));
         return path;
     }
@@ -754,38 +802,38 @@ public class WorkspaceMockService {
     private Optional<PinPosition> resolvePin(WorkspaceElement element, String pinKey) {
         return switch (element.type()) {
             case RESISTOR -> switch (pinKey) {
-                case "A" -> Optional.of(pin(element, pinKey, 22, 48));
-                case "B" -> Optional.of(pin(element, pinKey, 198, 48));
+                case "A" -> Optional.of(pin(element, pinKey, 22, 48, PinDirection.LEFT));
+                case "B" -> Optional.of(pin(element, pinKey, 198, 48, PinDirection.RIGHT));
                 default -> Optional.empty();
             };
             case INDUCTOR -> switch (pinKey) {
-                case "A" -> Optional.of(pin(element, pinKey, 22, 48));
-                case "B" -> Optional.of(pin(element, pinKey, 226, 48));
+                case "A" -> Optional.of(pin(element, pinKey, 22, 48, PinDirection.LEFT));
+                case "B" -> Optional.of(pin(element, pinKey, 226, 48, PinDirection.RIGHT));
                 default -> Optional.empty();
             };
             case CAPACITOR -> switch (pinKey) {
-                case "A" -> Optional.of(pin(element, pinKey, 48, 46));
-                case "B" -> Optional.of(pin(element, pinKey, 48, 190));
+                case "A" -> Optional.of(pin(element, pinKey, 48, 46, PinDirection.UP));
+                case "B" -> Optional.of(pin(element, pinKey, 48, 190, PinDirection.DOWN));
                 default -> Optional.empty();
             };
             case VOLTAGE, CURRENT -> switch (pinKey) {
-                case "POS" -> Optional.of(pin(element, pinKey, 74, 46));
-                case "NEG" -> Optional.of(pin(element, pinKey, 74, 326));
+                case "POS" -> Optional.of(pin(element, pinKey, 74, 46, PinDirection.UP));
+                case "NEG" -> Optional.of(pin(element, pinKey, 74, 326, PinDirection.DOWN));
                 default -> Optional.empty();
             };
             case GROUND -> switch (pinKey) {
-                case "REF" -> Optional.of(pin(element, pinKey, 46, 6));
+                case "REF" -> Optional.of(pin(element, pinKey, 46, 6, PinDirection.UP));
                 default -> Optional.empty();
             };
             case DIODE -> switch (pinKey) {
-                case "ANODE" -> Optional.of(pin(element, pinKey, 18, 48));
-                case "CATHODE" -> Optional.of(pin(element, pinKey, 162, 48));
+                case "ANODE" -> Optional.of(pin(element, pinKey, 18, 48, PinDirection.LEFT));
+                case "CATHODE" -> Optional.of(pin(element, pinKey, 162, 48, PinDirection.RIGHT));
                 default -> Optional.empty();
             };
             case OPAMP -> switch (pinKey) {
-                case "IN+" -> Optional.of(pin(element, pinKey, 0, 54));
-                case "IN-" -> Optional.of(pin(element, pinKey, 0, 94));
-                case "OUT" -> Optional.of(pin(element, pinKey, 220, 74));
+                case "IN+" -> Optional.of(pin(element, pinKey, 0, 54, PinDirection.LEFT));
+                case "IN-" -> Optional.of(pin(element, pinKey, 0, 94, PinDirection.LEFT));
+                case "OUT" -> Optional.of(pin(element, pinKey, 220, 74, PinDirection.RIGHT));
                 default -> Optional.empty();
             };
         };
@@ -900,6 +948,10 @@ public class WorkspaceMockService {
                 .orElse("brak połączeń");
     }
 
+    private static String swapAxisLabel(String label) {
+        return "Pionowo".equals(label) ? "Poziomo" : "Pionowo";
+    }
+
     private static String formatSourceNetlistLine(String keyword, WorkspaceElement element, String nodeA, String nodeB) {
         String normalizedSourceType = normalizedSourceType(element.sourceType());
         StringBuilder builder = new StringBuilder()
@@ -946,12 +998,20 @@ public class WorkspaceMockService {
         return fallbackToDefault ? defaultSineFrequency(type) : null;
     }
 
-    private static PinPosition pin(WorkspaceElement element, String pinKey, double relativeX, double relativeY) {
+    private static PinPosition pin(
+            WorkspaceElement element,
+            String pinKey,
+            double relativeX,
+            double relativeY,
+            PinDirection baseDirection) {
+        double rotatedX = rotateRelativeX(relativeX, relativeY, element.type().width(), element.type().height(), element.orientation());
+        double rotatedY = rotateRelativeY(relativeX, relativeY, element.type().width(), element.type().height(), element.orientation());
         return new PinPosition(
                 element.id(),
                 pinKey,
-                element.left() + relativeX,
-                element.top() + relativeY);
+                element.left() + rotatedX,
+                element.top() + rotatedY,
+                baseDirection.rotate(element.orientation()));
     }
 
     private static boolean connectsSamePins(WorkspaceWire wire, PinRef start, PinRef end) {
@@ -963,6 +1023,10 @@ public class WorkspaceMockService {
         return sameCoordinate(start.x(), end.x()) || sameCoordinate(start.y(), end.y());
     }
 
+    private static boolean sameAxis(WirePoint start, WirePoint end) {
+        return sameCoordinate(start.x(), end.x()) || sameCoordinate(start.y(), end.y());
+    }
+
     private static boolean sameCoordinate(double first, double second) {
         return Math.abs(first - second) < 0.01;
     }
@@ -971,6 +1035,40 @@ public class WorkspaceMockService {
         if (path.isEmpty() || !path.get(path.size() - 1).equals(point)) {
             path.add(point);
         }
+    }
+
+    private static WirePoint leadPoint(PinPosition pin) {
+        return new WirePoint(
+                snap(pin.x() + pin.direction().deltaX() * GRID_STEP),
+                snap(pin.y() + pin.direction().deltaY() * GRID_STEP));
+    }
+
+    private static double rotateRelativeX(
+            double relativeX,
+            double relativeY,
+            double width,
+            double height,
+            Orientation orientation) {
+        return switch (orientation) {
+            case DEG_0 -> relativeX;
+            case DEG_90 -> height - relativeY;
+            case DEG_180 -> width - relativeX;
+            case DEG_270 -> relativeY;
+        };
+    }
+
+    private static double rotateRelativeY(
+            double relativeX,
+            double relativeY,
+            double width,
+            double height,
+            Orientation orientation) {
+        return switch (orientation) {
+            case DEG_0 -> relativeY;
+            case DEG_90 -> relativeX;
+            case DEG_180 -> height - relativeY;
+            case DEG_270 -> width - relativeX;
+        };
     }
 
     private static double snap(double value) {
@@ -1019,8 +1117,52 @@ public class WorkspaceMockService {
             return height;
         }
 
+        public double orientedWidth(Orientation orientation) {
+            return orientation.swapsAxes() ? height : width;
+        }
+
+        public double orientedHeight(Orientation orientation) {
+            return orientation.swapsAxes() ? width : height;
+        }
+
         public boolean isSource() {
             return this == VOLTAGE || this == CURRENT;
+        }
+    }
+
+    public enum Orientation {
+        DEG_0(0, "0°"),
+        DEG_90(90, "90°"),
+        DEG_180(180, "180°"),
+        DEG_270(270, "270°");
+
+        private final int degrees;
+        private final String label;
+
+        Orientation(int degrees, String label) {
+            this.degrees = degrees;
+            this.label = label;
+        }
+
+        public int degrees() {
+            return degrees;
+        }
+
+        public String label() {
+            return label;
+        }
+
+        public boolean swapsAxes() {
+            return this == DEG_90 || this == DEG_270;
+        }
+
+        public Orientation next() {
+            return switch (this) {
+                case DEG_0 -> DEG_90;
+                case DEG_90 -> DEG_180;
+                case DEG_180 -> DEG_270;
+                case DEG_270 -> DEG_0;
+            };
         }
     }
 
@@ -1029,6 +1171,7 @@ public class WorkspaceMockService {
             ElementType type,
             double left,
             double top,
+            Orientation orientation,
             String value,
             String sourceType,
             Double frequency) {
@@ -1058,7 +1201,47 @@ public class WorkspaceMockService {
         }
     }
 
-    public record PinPosition(String elementId, String pinKey, double x, double y) {
+    public enum PinDirection {
+        LEFT(-1, 0),
+        RIGHT(1, 0),
+        UP(0, -1),
+        DOWN(0, 1);
+
+        private final int deltaX;
+        private final int deltaY;
+
+        PinDirection(int deltaX, int deltaY) {
+            this.deltaX = deltaX;
+            this.deltaY = deltaY;
+        }
+
+        public int deltaX() {
+            return deltaX;
+        }
+
+        public int deltaY() {
+            return deltaY;
+        }
+
+        public boolean isHorizontal() {
+            return this == LEFT || this == RIGHT;
+        }
+
+        public PinDirection rotate(Orientation orientation) {
+            PinDirection current = this;
+            for (int step = 0; step < orientation.degrees() / 90; step++) {
+                current = switch (current) {
+                    case LEFT -> UP;
+                    case UP -> RIGHT;
+                    case RIGHT -> DOWN;
+                    case DOWN -> LEFT;
+                };
+            }
+            return current;
+        }
+    }
+
+    public record PinPosition(String elementId, String pinKey, double x, double y, PinDirection direction) {
     }
 
     public record WirePoint(double x, double y) {
@@ -1192,7 +1375,7 @@ public class WorkspaceMockService {
                     element.isSource() ? formatFrequencyLabel(element.frequency()) : "-",
                     resolvedNodeA,
                     resolvedNodeB,
-                    orientation,
+                    formatOrientationLabel(orientation, element.orientation()),
                     description,
                     traceName,
                     peak,
@@ -1218,6 +1401,15 @@ public class WorkspaceMockService {
                     yield template.formatted(args);
                 }
             };
+        }
+
+        private static String formatOrientationLabel(String baseOrientation, Orientation orientation) {
+            String axisLabel = orientation.swapsAxes()
+                    ? swapAxisLabel(baseOrientation)
+                    : baseOrientation;
+            return orientation == Orientation.DEG_0
+                    ? axisLabel
+                    : axisLabel + " / " + orientation.label();
         }
     }
 }
