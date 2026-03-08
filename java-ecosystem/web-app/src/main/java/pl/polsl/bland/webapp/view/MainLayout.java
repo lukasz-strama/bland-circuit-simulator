@@ -687,6 +687,9 @@ public class MainLayout extends Div {
                         "Symulacja nie powiodła się",
                         latestSimulationMessage + ". Sprawdź logi i netlistę poniżej.",
                         List.of(),
+                        null,
+                        null,
+                        "V",
                         latestSimulationNetlist,
                         List.of(latestSimulationMessage));
             } else {
@@ -715,6 +718,9 @@ public class MainLayout extends Div {
                 measuredResults.plotTitle(),
                 measuredResults.plotHint(),
                 measuredResults.rows(),
+                measuredResults.plotXValues(),
+                measuredResults.plotYValues(),
+                measuredResults.plotUnit(),
                 latestSimulationNetlist == null ? details.netlist() : latestSimulationNetlist,
                 measuredResults.logs());
     }
@@ -770,6 +776,9 @@ public class MainLayout extends Div {
                 plotHint,
                 rows,
                 logs,
+                timePoints,
+                voltageDelta,
+                "V",
                 voltageTrace,
                 formatMeasurement(max(voltageDelta), "V"),
                 formatMeasurement(min(voltageDelta), "V"),
@@ -1978,6 +1987,9 @@ public class MainLayout extends Div {
             String plotHint,
             List<WorkspaceMockService.ResultRow> rows,
             List<String> logs,
+            double[] plotXValues,
+            double[] plotYValues,
+            String plotUnit,
             String primaryTraceName,
             String peak,
             String min,
