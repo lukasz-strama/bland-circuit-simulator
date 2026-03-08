@@ -1,5 +1,6 @@
 #include "api/handlers.hpp"
 
+#include <cctype>
 #include <iomanip>
 #include <sstream>
 
