@@ -17,6 +17,7 @@ import pl.polsl.bland.webapp.service.WorkspaceExportService;
 import pl.polsl.bland.webapp.view.panel.PropertiesWindow;
 import pl.polsl.bland.webapp.view.panel.ResultsWindow;
 
+import java.math.BigDecimal;
 import java.util.EnumMap;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -66,6 +67,8 @@ public class MainLayout extends Div {
     private final Select<String> analysisSelect = new Select<>();
     private final Select<String> sourceTypeSelect = new Select<>();
     private final TextField componentSearch = new TextField();
+    private final TextField analysisTstopField = new TextField();
+    private final TextField analysisTstepField = new TextField();
     private final TextField elementValueField = new TextField();
     private final TextField sourceFrequencyField = new TextField();
     private final TextField netNameField = new TextField();
@@ -89,6 +92,8 @@ public class MainLayout extends Div {
     private String latestSimulationNetlist;
     private String latestSimulationMessage;
     private double zoom = DEFAULT_ZOOM;
+    private double transientTstop;
+    private double transientTstep;
     private boolean simulationReady;
     private boolean suppressAnalysisEvents;
 
@@ -101,6 +106,7 @@ public class MainLayout extends Div {
         this.backendClient = backendClient;
         this.workspaceExportService = workspaceExportService;
         this.simulationCsvService = simulationCsvService;
+        initializeTransientParameters();
         this.propertiesWindow = new PropertiesWindow();
         this.resultsWindow = new ResultsWindow();
         this.schematicPreview = new SchematicPreview(new SchematicPreview.InteractionHandler() {
@@ -131,6 +137,7 @@ public class MainLayout extends Div {
         });
 
         configureAnalysisSelect();
+        configureTransientParameterFields();
         configureComponentSearch();
         configureElementValueField();
         configureSourceTypeSelect();
@@ -155,6 +162,21 @@ public class MainLayout extends Div {
                 setAnalysis(event.getValue(), false, false);
             }
         });
+    }
+
+    private void initializeTransientParameters() {
+        transientTstop = workspaceExportService.defaultTransientTstop();
+        transientTstep = workspaceExportService.defaultTransientTstep();
+    }
+
+    private void configureTransientParameterFields() {
+        analysisTstopField.setPlaceholder("tstop [s]");
+        analysisTstopField.addClassName("analysis-parameter-field");
+        analysisTstopField.setClearButtonVisible(false);
+
+        analysisTstepField.setPlaceholder("tstep [s]");
+        analysisTstepField.addClassName("analysis-parameter-field");
+        analysisTstepField.setClearButtonVisible(false);
     }
 
     private void configureComponentSearch() {
@@ -223,6 +245,7 @@ public class MainLayout extends Div {
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
         componentSearch.clear();
+        resetTransientParameters(true);
         setAnalysis(ANALYSIS_TRANSIENT, true, true);
         setActiveTool(WorkspaceTool.SELECT, true);
         setActiveComponent(QuickComponent.RESISTOR, true);
@@ -505,6 +528,9 @@ public class MainLayout extends Div {
                 new LinkedHashMap<>(workspaceElements),
                 new LinkedHashMap<>(workspaceWires),
                 new LinkedHashMap<>(netAliases),
+                analysisLabel,
+                transientTstop,
+                transientTstep,
                 selectedElementId,
                 selectedWireId,
                 selectedNetKey,
@@ -546,6 +572,8 @@ public class MainLayout extends Div {
         workspaceWires.putAll(snapshot.wires());
         netAliases.clear();
         netAliases.putAll(snapshot.netAliases());
+        setAnalysis(snapshot.analysisLabel(), true, true);
+        setTransientParameters(snapshot.transientTstop(), snapshot.transientTstep());
         selectedElementId = snapshot.selectedElementId();
         selectedWireId = snapshot.selectedWireId();
         selectedNetKey = snapshot.selectedNetKey();
@@ -589,6 +617,8 @@ public class MainLayout extends Div {
                 new LinkedHashMap<>(workspaceWires),
                 new LinkedHashMap<>(netAliases),
                 analysisLabel,
+                transientTstop,
+                transientTstep,
                 activeComponent,
                 selectedElementId,
                 selectedWireId,
@@ -613,6 +643,7 @@ public class MainLayout extends Div {
         pendingWireEndpoint = null;
         clearSimulationState();
         setAnalysis(snapshot.analysisLabel(), true, true);
+        setTransientParameters(snapshot.transientTstop(), snapshot.transientTstep());
         setActiveComponent(snapshot.activeComponent(), true);
         setActiveTool(WorkspaceTool.SELECT, true);
         setZoom(snapshot.zoom(), true);
@@ -817,8 +848,9 @@ public class MainLayout extends Div {
     }
 
     private double[] resolveCurrentSeries(WorkspaceMockService.WorkspaceElement element, double[] timePoints) {
-        if (element.type() == WorkspaceMockService.ElementType.VOLTAGE) {
-            return latestSimulation.seriesOrNull("I(" + element.id() + ")");
+        double[] engineSeries = latestSimulation.seriesOrNull("I(" + element.id() + ")");
+        if (engineSeries != null) {
+            return engineSeries;
         }
         if (element.type() != WorkspaceMockService.ElementType.CURRENT) {
             return null;
@@ -850,9 +882,9 @@ public class MainLayout extends Div {
         if (currentSeries == null) {
             return null;
         }
-        return element.type() == WorkspaceMockService.ElementType.CURRENT
-                ? "I(" + element.id() + ") [wyliczone]"
-                : "I(" + element.id() + ")";
+        return latestSimulation.hasSeries("I(" + element.id() + ")")
+                ? "I(" + element.id() + ")"
+                : "I(" + element.id() + ") [wyliczone]";
     }
 
     private double[] subtractSeries(double[] first, double[] second) {
@@ -1023,7 +1055,12 @@ public class MainLayout extends Div {
     }
 
     private Map<String, Double> resolveAnalysisParameters() {
-        return workspaceExportService.defaultParameters(resolveAnalysisType());
+        if (resolveAnalysisType() == SimulationRequest.AnalysisType.DC) {
+            return Map.of();
+        }
+        return Map.of(
+                "tstop", transientTstop,
+                "tstep", transientTstep);
     }
 
     private void setAnalysis(String nextAnalysis, boolean silent, boolean syncSelect) {
@@ -1038,9 +1075,14 @@ public class MainLayout extends Div {
             suppressAnalysisEvents = false;
         }
 
+        syncTransientControls();
         statusAnalysisValue.setText(nextAnalysis);
         refreshSelectionPanels();
         updateSimulationIndicators();
+
+        if (analysisChanged && !silent) {
+            recordWorkspaceChange();
+        }
 
         if (!silent) {
             statusMessageValue.setText("Tryb analizy ustawiono na: " + nextAnalysis + ".");
@@ -1138,6 +1180,92 @@ public class MainLayout extends Div {
         latestSimulationNetlist = null;
         latestSimulationMessage = null;
         simulationReady = false;
+    }
+
+    private void applyTransientParameters() {
+        if (resolveAnalysisType() != SimulationRequest.AnalysisType.TRANSIENT) {
+            statusMessageValue.setText("Parametry tstop i tstep dotyczą tylko analizy przejściowej.");
+            return;
+        }
+
+        double nextTstop;
+        double nextTstep;
+        try {
+            nextTstop = parsePositiveAnalysisParameter(analysisTstopField.getValue(), "tstop");
+            nextTstep = parsePositiveAnalysisParameter(analysisTstepField.getValue(), "tstep");
+        } catch (IllegalArgumentException exception) {
+            statusMessageValue.setText(exception.getMessage());
+            return;
+        }
+
+        if (nextTstep >= nextTstop) {
+            statusMessageValue.setText("Parametr tstep musi być mniejszy od tstop.");
+            return;
+        }
+
+        if (Double.compare(transientTstop, nextTstop) == 0 && Double.compare(transientTstep, nextTstep) == 0) {
+            statusMessageValue.setText("Parametry analizy przejściowej nie zmieniły się.");
+            return;
+        }
+
+        setTransientParameters(nextTstop, nextTstep);
+        recordWorkspaceChange();
+        statusMessageValue.setText("Ustawiono analizę przejściową: tstop="
+                + formatAnalysisParameter(transientTstop)
+                + " s, tstep="
+                + formatAnalysisParameter(transientTstep)
+                + " s.");
+    }
+
+    private void resetTransientParameters(boolean silent) {
+        setTransientParameters(
+                workspaceExportService.defaultTransientTstop(),
+                workspaceExportService.defaultTransientTstep());
+        if (!silent) {
+            recordWorkspaceChange();
+            statusMessageValue.setText("Przywrócono domyślne parametry analizy przejściowej.");
+        }
+    }
+
+    private void setTransientParameters(double tstop, double tstep) {
+        transientTstop = tstop;
+        transientTstep = tstep;
+        syncTransientControls();
+    }
+
+    private void syncTransientControls() {
+        boolean enabled = resolveAnalysisType() == SimulationRequest.AnalysisType.TRANSIENT;
+        analysisTstopField.setEnabled(enabled);
+        analysisTstepField.setEnabled(enabled);
+
+        String tstopValue = formatAnalysisParameter(transientTstop);
+        if (!tstopValue.equals(analysisTstopField.getValue())) {
+            analysisTstopField.setValue(tstopValue);
+        }
+
+        String tstepValue = formatAnalysisParameter(transientTstep);
+        if (!tstepValue.equals(analysisTstepField.getValue())) {
+            analysisTstepField.setValue(tstepValue);
+        }
+    }
+
+    private double parsePositiveAnalysisParameter(String rawValue, String label) {
+        String candidate = rawValue == null ? "" : rawValue.trim().replace(',', '.');
+        if (candidate.isBlank()) {
+            throw new IllegalArgumentException("Wpisz parametr " + label + " w sekundach.");
+        }
+
+        double parsed;
+        try {
+            parsed = Double.parseDouble(candidate);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException("Parametr " + label + " musi być dodatnią liczbą.");
+        }
+
+        if (!Double.isFinite(parsed) || parsed <= 0) {
+            throw new IllegalArgumentException("Parametr " + label + " musi być większy od zera.");
+        }
+        return parsed;
     }
 
     private void applySelectedElementValue() {
@@ -1647,6 +1775,12 @@ public class MainLayout extends Div {
         Span showResults = createAction("Pokaż wyniki", "tool-button");
         showResults.addClickListener(event -> toggleResultsWindow(true));
 
+        Span applyTransientButton = createAction("Ustaw", "mini-button");
+        applyTransientButton.addClickListener(event -> applyTransientParameters());
+
+        Span resetTransientButton = createAction("Auto", "mini-button");
+        resetTransientButton.addClickListener(event -> resetTransientParameters(false));
+
         Span renameNet = createAction("Nazwij", "mini-button");
         renameNet.addClickListener(event -> applySelectedNetName());
 
@@ -1719,7 +1853,13 @@ public class MainLayout extends Div {
                 showResults));
 
         primaryRow.add(separator());
-        primaryRow.add(buildToolbarGroup(createLabel("Analiza"), analysisSelect));
+        primaryRow.add(buildToolbarGroup(
+                createLabel("Analiza"),
+                analysisSelect,
+                analysisTstopField,
+                analysisTstepField,
+                applyTransientButton,
+                resetTransientButton));
 
         primaryRow.add(separator());
         primaryRow.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
@@ -1982,6 +2122,10 @@ public class MainLayout extends Div {
         return Double.toString(frequency);
     }
 
+    private static String formatAnalysisParameter(double value) {
+        return BigDecimal.valueOf(value).stripTrailingZeros().toPlainString();
+    }
+
     private record MeasuredResults(
             String plotTitle,
             String plotHint,
@@ -2002,6 +2146,9 @@ public class MainLayout extends Div {
             LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
             LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
             LinkedHashMap<String, String> netAliases,
+            String analysisLabel,
+            double transientTstop,
+            double transientTstep,
             String selectedElementId,
             String selectedWireId,
             String selectedNetKey,
@@ -2015,6 +2162,8 @@ public class MainLayout extends Div {
             LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
             LinkedHashMap<String, String> netAliases,
             String analysisLabel,
+            double transientTstop,
+            double transientTstep,
             QuickComponent activeComponent,
             String selectedElementId,
             String selectedWireId,

@@ -59,11 +59,19 @@ public class WorkspaceExportService {
     public Map<String, Double> defaultParameters(SimulationRequest.AnalysisType analysisType) {
         if (analysisType == SimulationRequest.AnalysisType.TRANSIENT) {
             Map<String, Double> parameters = new LinkedHashMap<>();
-            parameters.put("tstop", DEFAULT_TSTOP);
-            parameters.put("tstep", DEFAULT_TSTEP);
+            parameters.put("tstop", defaultTransientTstop());
+            parameters.put("tstep", defaultTransientTstep());
             return parameters;
         }
         return Map.of();
+    }
+
+    public double defaultTransientTstop() {
+        return DEFAULT_TSTOP;
+    }
+
+    public double defaultTransientTstep() {
+        return DEFAULT_TSTEP;
     }
 
     private CircuitElement exportElement(
@@ -166,8 +174,8 @@ public class WorkspaceExportService {
         }
 
         Map<String, Double> parameters = request.parameters() == null ? Map.of() : request.parameters();
-        double tstop = parameters.getOrDefault("tstop", DEFAULT_TSTOP);
-        double tstep = parameters.getOrDefault("tstep", DEFAULT_TSTEP);
+        double tstop = parameters.getOrDefault("tstop", defaultTransientTstop());
+        double tstep = parameters.getOrDefault("tstep", defaultTransientTstep());
         return ".SIMULATE type=trans tstop=" + formatNumber(tstop) + " tstep=" + formatNumber(tstep);
     }
 

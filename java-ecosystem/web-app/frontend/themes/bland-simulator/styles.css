@@ -219,6 +219,10 @@ vaadin-select.toolbar-select {
   width: 176px;
 }
 
+vaadin-text-field.analysis-parameter-field {
+  width: 108px;
+}
+
 vaadin-text-field.element-value-field,
 vaadin-text-field.net-name-field {
   width: 150px;
