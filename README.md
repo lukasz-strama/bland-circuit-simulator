@@ -21,7 +21,7 @@ System będzie oparty na architekturze klient-serwer z wykorzystaniem mikroserwi
     * Wystawienie silnika jako mikroserwisu HTTP (przy użyciu biblioteki Crow) oraz napisanie parsera danych wejściowych.
     * Współtworzenie modułu shared-models w środowisku Java.
 
-* **Osoba 2: Backend i baza danych**
+* **Osoba 2: Backend i baza danych** ([github.com/SCARECROWMANE](https://github.com/SCARECROWMANE))
     * Projekt i wdrożenie bazy danych.
     * Stworzenie REST API do obsługi kont użytkowników i zapisu projektów (JSON).
     * Implementacja klienta HTTP w backendzie.
