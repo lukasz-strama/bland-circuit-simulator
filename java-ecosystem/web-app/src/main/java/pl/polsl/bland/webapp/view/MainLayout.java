@@ -1,21 +1,83 @@
 package pl.polsl.bland.webapp.view;
 
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Text;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
-import com.vaadin.flow.router.Route;
-import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.router.PageTitle;
+import com.vaadin.flow.router.Route;
+import pl.polsl.bland.webapp.service.WorkspaceMockService;
+import pl.polsl.bland.webapp.view.panel.PropertiesWindow;
+import pl.polsl.bland.webapp.view.panel.ResultsWindow;
 
 @Route("")
 @PageTitle("Bland Circuit Simulator")
 public class MainLayout extends Div {
+    private static final String CLICKED_ELEMENT_EVENT_DATA =
+            "event.target.closest('[data-element]') ? event.target.closest('[data-element]').dataset.element : ''";
 
-    public MainLayout() {
+    private final WorkspaceMockService workspaceMockService;
+    private final PropertiesWindow propertiesWindow;
+    private final ResultsWindow resultsWindow;
+    private final Div sheetStage;
+    private final Span activeSymbolReadout;
+    private final Span simulationBadgeText;
+    private final Span statusSimulationValue;
+    private final Span statusMessageValue;
+
+    public MainLayout(WorkspaceMockService workspaceMockService) {
+        this.workspaceMockService = workspaceMockService;
+        this.propertiesWindow = new PropertiesWindow();
+        this.resultsWindow = new ResultsWindow();
+        this.sheetStage = new Div();
+        this.activeSymbolReadout = createWideReadout("R / Rezystor");
+        this.simulationBadgeText = new Span("Brak wyników");
+        this.statusSimulationValue = new Span("Brak uruchomienia");
+        this.statusMessageValue = new Span("Makieta UI jest gotowa. Następny krok: mockowana interakcja.");
+
         addClassName("main-view");
         setSizeFull();
+
+        configureSheetStage();
         add(buildAppShell());
+        selectElement(workspaceMockService.defaultElement().id());
+    }
+
+    private void configureSheetStage() {
+        sheetStage.addClassName("sheet-stage");
+        sheetStage.getElement().setProperty("innerHTML", SchematicPreviewFactory.render());
+        sheetStage.getElement()
+                .addEventListener("click", event -> {
+                    String elementId = event.getEventData().getString(CLICKED_ELEMENT_EVENT_DATA);
+                    if (elementId != null && !elementId.isBlank()) {
+                        selectElement(elementId);
+                    }
+                })
+                .addEventData(CLICKED_ELEMENT_EVENT_DATA);
+    }
+
+    private void selectElement(String elementId) {
+        workspaceMockService.findElement(elementId).ifPresent(details -> {
+            propertiesWindow.update(details);
+            resultsWindow.update(details);
+            activeSymbolReadout.setText(details.symbol() + " / " + details.typeLabel());
+            simulationBadgeText.setText("Mock: " + details.traceName());
+            statusSimulationValue.setText("Podgląd " + details.traceName());
+            statusMessageValue.setText("Zaznaczono " + details.id() + ". Kliknij inny element na arkuszu.");
+            highlightSelectedElement(elementId);
+        });
+    }
+
+    private void highlightSelectedElement(String elementId) {
+        sheetStage.getElement().executeJs("""
+                this.querySelectorAll('.schematic-part').forEach(part => part.classList.remove('is-selected'));
+                const selected = this.querySelector('.schematic-part[data-element="' + $0 + '"]');
+                if (selected) {
+                    selected.classList.add('is-selected');
+                }
+                """, elementId);
     }
 
     private Div buildAppShell() {
@@ -77,14 +139,10 @@ public class MainLayout extends Div {
         analysis.setItems("Analiza przejściowa", "Punkt pracy DC");
         analysis.setValue("Analiza przejściowa");
         analysis.addClassName("toolbar-select");
-        toolbar.add(buildToolbarGroup(
-                createLabel("Analiza"),
-                analysis));
+        toolbar.add(buildToolbarGroup(createLabel("Analiza"), analysis));
 
         toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(
-                createLabel("Narzędzie"),
-                createReadout("Zaznacz")));
+        toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), createReadout("Zaznacz")));
 
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(
@@ -128,9 +186,7 @@ public class MainLayout extends Div {
         fillGroup.addClassName("is-fill");
         componentBar.add(fillGroup);
 
-        componentBar.add(buildComponentGroup(
-                createLabel("Aktywny symbol"),
-                createWideReadout("R / Rezystor")));
+        componentBar.add(buildComponentGroup(createLabel("Aktywny symbol"), activeSymbolReadout));
         return componentBar;
     }
 
@@ -160,114 +216,33 @@ public class MainLayout extends Div {
 
         Div workspaceViewport = new Div();
         workspaceViewport.addClassName("workspace-viewport");
-
-        Div sheetStage = new Div();
-        sheetStage.addClassName("sheet-stage");
-        sheetStage.getElement().setProperty("innerHTML", SchematicPreviewFactory.render());
-
         workspaceViewport.add(sheetStage);
-        workspacePanel.add(workspaceViewport, buildPropertiesWindow(), buildResultsWindow());
+
+        workspacePanel.add(workspaceViewport, propertiesWindow, resultsWindow);
         return workspacePanel;
-    }
-
-    private Div buildPropertiesWindow() {
-        Div propertiesWindow = new Div();
-        propertiesWindow.addClassNames("floating-window");
-        propertiesWindow.getElement().setProperty("innerHTML", """
-                <div class="window-titlebar">
-                  <div>
-                    <div class="window-title">Właściwości elementu</div>
-                    <div class="window-caption">Aktywny element: R1</div>
-                  </div>
-                  <div class="window-close">x</div>
-                </div>
-                <div class="window-body">
-                  <div class="panel-block">
-                    <div class="section-title">Parametry</div>
-                    <dl class="property-grid">
-                      <dt>ID elementu</dt><dd>R1</dd>
-                      <dt>Typ</dt><dd>Rezystor</dd>
-                      <dt>Wartość</dt><dd>120 Ohm</dd>
-                      <dt>Węzeł A</dt><dd>IN</dd>
-                      <dt>Węzeł B</dt><dd>N001</dd>
-                      <dt>Orientacja</dt><dd>Poziomo</dd>
-                      <dt>Opis</dt><dd>Rezystor wejściowy ograniczający prąd.</dd>
-                    </dl>
-                  </div>
-                  <div class="panel-block">
-                    <div class="section-title">Dane po symulacji</div>
-                    <div class="hint-box">Dane nie są jeszcze dostępne. Uruchom symulację, a następnie kliknij element, aby odczytać jego ślad i statystyki.</div>
-                  </div>
-                </div>
-                """);
-        return propertiesWindow;
-    }
-
-    private Div buildResultsWindow() {
-        Div resultsWindow = new Div();
-        resultsWindow.addClassNames("floating-window", "is-results-window");
-        resultsWindow.getElement().setProperty("innerHTML", """
-                <div class="window-titlebar">
-                  <div>
-                    <div class="window-title">Wyniki symulacji</div>
-                    <div class="window-caption">Aktywny element: R1 / Rezystor</div>
-                  </div>
-                  <div class="badge badge-inline">Analiza przejściowa</div>
-                </div>
-                <div class="results-window-body">
-                  <div class="tab-bar">
-                    <div class="tab-button is-active">Wyniki symulacji</div>
-                    <div class="tab-button">Przebiegi</div>
-                    <div class="tab-button">Netlista</div>
-                    <div class="tab-button">Logi</div>
-                  </div>
-                  <div class="tab-panels">
-                    <div class="tab-panel is-active">
-                      <div class="placeholder">Brak wygenerowanych wyników. Otwórz ustawienia symulacji i uruchom profil, aby wypełnić tabele, przebiegi i statystyki.</div>
-                    </div>
-                    <div class="tab-panel">
-                      <div class="plot-box">
-                        <div class="plot-title">Aktywny ślad: I(R1)</div>
-                        <div class="hint-box">Podgląd przebiegu pojawi się po integracji z backendem i silnikiem.</div>
-                      </div>
-                    </div>
-                    <div class="tab-panel">
-                      <div class="netlist-box">* netlista pojawi się tutaj po spięciu z backendem</div>
-                    </div>
-                    <div class="tab-panel">
-                      <div class="log-list">
-                        <div>System gotowy do pracy.</div>
-                        <div>Silnik C++ oczekuje na integrację z backendem.</div>
-                        <div>Warstwa web przechodzi z mockupu do implementacji Vaadin.</div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                """);
-        return resultsWindow;
     }
 
     private Div buildStatusBar() {
         Div statusBar = new Div();
         statusBar.addClassName("statusbar");
         statusBar.add(
-                createStatusSegment("Arkusz", "1"),
-                createStatusSegment("Narzędzie", "Zaznacz"),
-                createStatusSegment("Analiza", "Analiza przejściowa"),
-                createStatusSegment("Symulacja", "Brak uruchomienia"),
-                createStretchStatusSegment("Komunikat", "Makieta UI jest gotowa. Następny krok: mockowana interakcja."),
-                createStatusSegment("Zoom", "92%"));
+                createStatusSegment("Arkusz", new Span("1")),
+                createStatusSegment("Narzędzie", new Span("Zaznacz")),
+                createStatusSegment("Analiza", new Span("Analiza przejściowa")),
+                createStatusSegment("Symulacja", statusSimulationValue),
+                createStretchStatusSegment("Komunikat", statusMessageValue),
+                createStatusSegment("Zoom", new Span("92%")));
         return statusBar;
     }
 
-    private Div buildToolbarGroup(com.vaadin.flow.component.Component... children) {
+    private Div buildToolbarGroup(Component... children) {
         Div group = new Div();
         group.addClassName("toolbar-group");
         group.add(children);
         return group;
     }
 
-    private Div buildComponentGroup(com.vaadin.flow.component.Component... children) {
+    private Div buildComponentGroup(Component... children) {
         Div group = new Div();
         group.addClassName("componentbar-group");
         group.add(children);
@@ -309,7 +284,7 @@ public class MainLayout extends Div {
         badge.addClassName("badge");
         Span dot = new Span();
         dot.addClassNames("status-dot", "is-idle");
-        badge.add(dot, new Text("Brak wyników"));
+        badge.add(dot, simulationBadgeText);
         return badge;
     }
 
@@ -326,14 +301,16 @@ public class MainLayout extends Div {
         return component;
     }
 
-    private Div createStatusSegment(String label, String value) {
+    private Div createStatusSegment(String label, Component value) {
         Div segment = new Div();
         segment.addClassName("status-segment");
-        segment.add(new Span(label), new Span(value));
+        Span labelSpan = new Span(label);
+        labelSpan.addClassName("status-label");
+        segment.add(labelSpan, value);
         return segment;
     }
 
-    private Div createStretchStatusSegment(String label, String value) {
+    private Div createStretchStatusSegment(String label, Component value) {
         Div segment = createStatusSegment(label, value);
         segment.addClassName("is-stretch");
         return segment;

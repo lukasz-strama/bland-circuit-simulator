@@ -55,7 +55,7 @@ final class SchematicPreviewFactory {
                     <text class="node-label" x="919" y="222">N003</text>
                   </g>
 
-                  <g class="schematic-part is-selected">
+                  <g class="schematic-part is-selected" data-element="R1">
                     <rect class="selection-halo" x="270" y="192" width="220" height="94" rx="3"></rect>
                     <path class="component-wire" d="M 292 240 L 308 240"></path>
                     <path class="component-shape no-fill" d="M 308 240 L 328 220 L 348 260 L 368 220 L 388 260 L 408 220 L 428 260 L 448 220 L 468 240"></path>
@@ -63,7 +63,7 @@ final class SchematicPreviewFactory {
                     <text class="component-value" x="344" y="286">120 Ohm</text>
                   </g>
 
-                  <g class="schematic-part">
+                  <g class="schematic-part" data-element="L1">
                     <rect class="selection-halo" x="590" y="192" width="248" height="94" rx="3"></rect>
                     <path class="component-wire" d="M 612 240 L 630 240"></path>
                     <path class="component-shape no-fill" d="M 630 240
@@ -76,7 +76,7 @@ final class SchematicPreviewFactory {
                     <text class="component-value" x="688" y="286">22 mH</text>
                   </g>
 
-                  <g class="schematic-part">
+                  <g class="schematic-part" data-element="C1">
                     <rect class="selection-halo" x="892" y="194" width="96" height="234" rx="3"></rect>
                     <path class="component-wire" d="M 940 240 L 940 286"></path>
                     <path class="component-shape no-fill" d="M 920 286 L 960 286"></path>
@@ -86,7 +86,7 @@ final class SchematicPreviewFactory {
                     <text class="component-value" x="972" y="330">4,7 uF</text>
                   </g>
 
-                  <g class="schematic-part">
+                  <g class="schematic-part" data-element="V1">
                     <rect class="selection-halo" x="132" y="194" width="104" height="272" rx="3"></rect>
                     <path class="component-wire" d="M 184 240 L 184 286"></path>
                     <circle class="component-shape no-fill" cx="184" cy="360" r="74"></circle>
@@ -101,7 +101,7 @@ final class SchematicPreviewFactory {
                     <text class="component-value" x="110" y="474">SIN(0 5 1k)</text>
                   </g>
 
-                  <g class="schematic-part">
+                  <g class="schematic-part" data-element="GND">
                     <rect class="selection-halo" x="138" y="514" width="96" height="80" rx="3"></rect>
                     <path class="component-wire" d="M 184 520 L 184 542"></path>
                     <path class="component-shape no-fill" d="M 156 542 L 212 542"></path>

@@ -426,18 +426,22 @@ vaadin-text-field.component-search {
   margin: 0;
 }
 
-.property-grid dt,
-.property-grid dd {
-  margin: 0;
-}
-
-.property-grid dt {
+.property-grid > span:nth-child(odd),
+.simulation-data > span:nth-child(odd) {
   color: var(--text-dim);
 }
 
-.property-grid dd {
+.property-grid > span:nth-child(even),
+.simulation-data > span:nth-child(even) {
   color: var(--text-main);
   font-weight: 500;
+}
+
+.simulation-data {
+  display: grid;
+  grid-template-columns: 108px 1fr;
+  gap: 5px 10px;
+  margin-top: 8px;
 }
 
 .hint-box,
@@ -477,6 +481,31 @@ vaadin-text-field.component-search {
 
 .log-list {
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+.table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.table-wrap th,
+.table-wrap td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #d2dce7;
+  text-align: left;
+}
+
+.table-wrap th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+  background: rgba(232, 237, 243, 0.9);
 }
 
 .statusbar {
@@ -565,6 +594,17 @@ vaadin-text-field.component-search {
   fill: rgba(53, 91, 134, 0.07);
   stroke: rgba(53, 91, 134, 0.24);
   stroke-width: 1.5;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.schematic-part {
+  cursor: pointer;
+}
+
+.schematic-part.is-selected .selection-halo,
+.schematic-part:hover .selection-halo {
+  opacity: 1;
 }
 
 .node-dot {
