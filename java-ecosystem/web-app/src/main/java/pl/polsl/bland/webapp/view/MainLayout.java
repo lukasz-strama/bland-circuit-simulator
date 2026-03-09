@@ -1,6 +1,7 @@
 package pl.polsl.bland.webapp.view;
 
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.Svg;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
@@ -49,7 +50,7 @@ public class MainLayout extends Div {
     private final LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> workspaceElements = new LinkedHashMap<>();
     private final LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> workspaceWires = new LinkedHashMap<>();
     private final Div workspacePanel = new Div();
-    private final Span activeSymbolReadout = createWideReadout("");
+    private final Span activeSymbolReadout = createActiveSymbolReadout();
     private final Span analysisConfigReadout = createWideReadout("");
     private final Span undoButton = createAction("Cofnij", "tool-button");
     private final Span redoButton = createAction("Ponów", "tool-button");
@@ -1365,7 +1366,7 @@ public class MainLayout extends Div {
 
     private void setActiveComponent(QuickComponent component, boolean silent) {
         activeComponent = component;
-        activeSymbolReadout.setText(component.glyph() + " / " + component.label());
+        renderActiveSymbolReadout(component);
         quickComponentButtons.forEach((key, button) -> setClass(button, "is-active", key == component));
 
         if (!silent) {
@@ -2410,14 +2411,21 @@ public class MainLayout extends Div {
         return action;
     }
 
+    private Span createActiveSymbolReadout() {
+        Span readout = createWideReadout("");
+        readout.addClassName("active-symbol-readout");
+        return readout;
+    }
+
     private Div createQuickComponent(QuickComponent component) {
         Div button = new Div();
         button.addClassName("quick-component");
+        button.getElement().setAttribute("title", component.label());
         button.addClickListener(event -> activateComponentPlacement(component));
 
-        Span symbol = new Span(component.glyph());
-        symbol.addClassName("quick-component-glyph");
-        button.add(symbol, new Span(component.label()));
+        Span label = new Span(component.label());
+        label.addClassName("quick-component-label");
+        button.add(createComponentIcon(component, "quick-component-icon"), label);
 
         quickComponentButtons.put(component, button);
         return button;
@@ -2466,6 +2474,104 @@ public class MainLayout extends Div {
         Span readout = createReadout(text);
         readout.addClassName("is-wide");
         return readout;
+    }
+
+    private void renderActiveSymbolReadout(QuickComponent component) {
+        activeSymbolReadout.removeAll();
+
+        Span label = new Span(component.label());
+        label.addClassName("active-symbol-label");
+
+        Span key = new Span(component.glyph());
+        key.addClassName("active-symbol-key");
+
+        activeSymbolReadout.add(createComponentIcon(component, "symbol-readout-icon"), label, key);
+    }
+
+    private Svg createComponentIcon(QuickComponent component, String className) {
+        Svg icon = new Svg();
+        icon.addClassName(className);
+        icon.getElement().setAttribute("aria-hidden", "true");
+        icon.setSvg(buildComponentIconSvg(component));
+        return icon;
+    }
+
+    private String buildComponentIconSvg(QuickComponent component) {
+        return switch (component) {
+            case RESISTOR -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="10" x2="6" y2="10"/>
+                      <polyline points="6,10 9,6 12,14 15,6 18,14 21,6 24,14 27,6 30,10"/>
+                      <line x1="30" y1="10" x2="35" y2="10"/>
+                    </svg>
+                    """;
+            case CAPACITOR -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="10" x2="13" y2="10"/>
+                      <line x1="13" y1="4" x2="13" y2="16"/>
+                      <line x1="23" y1="4" x2="23" y2="16"/>
+                      <line x1="23" y1="10" x2="35" y2="10"/>
+                    </svg>
+                    """;
+            case INDUCTOR -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="10" x2="6" y2="10"/>
+                      <path d="M6 10c0-4 4-6 6-6s6 2 6 6"/>
+                      <path d="M12 10c0-4 4-6 6-6s6 2 6 6"/>
+                      <path d="M18 10c0-4 4-6 6-6s6 2 6 6"/>
+                      <path d="M24 10c0-4 4-6 6-6s6 2 6 6"/>
+                    </svg>
+                    """;
+            case VOLTAGE -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="10" x2="7" y2="10"/>
+                      <circle cx="18" cy="10" r="8"/>
+                      <line x1="18" y1="2" x2="18" y2="4.5"/>
+                      <line x1="18" y1="15.5" x2="18" y2="18"/>
+                      <line x1="18" y1="6.5" x2="18" y2="11.5"/>
+                      <line x1="15.5" y1="9" x2="20.5" y2="9"/>
+                      <line x1="15.5" y1="13" x2="20.5" y2="13"/>
+                      <line x1="29" y1="10" x2="35" y2="10"/>
+                    </svg>
+                    """;
+            case CURRENT -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="10" x2="7" y2="10"/>
+                      <circle cx="18" cy="10" r="8"/>
+                      <line x1="18" y1="16" x2="18" y2="6.5"/>
+                      <line x1="15.5" y1="9.5" x2="18" y2="6.5"/>
+                      <line x1="20.5" y1="9.5" x2="18" y2="6.5"/>
+                      <line x1="29" y1="10" x2="35" y2="10"/>
+                    </svg>
+                    """;
+            case GROUND -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="18" y1="2" x2="18" y2="7"/>
+                      <line x1="8" y1="7" x2="28" y2="7"/>
+                      <line x1="11" y1="11" x2="25" y2="11"/>
+                      <line x1="14" y1="15" x2="22" y2="15"/>
+                    </svg>
+                    """;
+            case DIODE -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="10" x2="9" y2="10"/>
+                      <polygon points="9,4 21,10 9,16"/>
+                      <line x1="23" y1="4" x2="23" y2="16"/>
+                      <line x1="23" y1="10" x2="35" y2="10"/>
+                    </svg>
+                    """;
+            case OPAMP -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="1" y1="6" x2="9" y2="6"/>
+                      <line x1="1" y1="14" x2="9" y2="14"/>
+                      <polygon points="9,2 9,18 25,10"/>
+                      <line x1="25" y1="10" x2="35" y2="10"/>
+                      <line x1="4.5" y1="6" x2="6.5" y2="6"/>
+                      <line x1="5.5" y1="5" x2="5.5" y2="7"/>
+                      <line x1="4.5" y1="14" x2="6.5" y2="14"/>
+                    </svg>
+                    """;
+        };
     }
 
     private Div buildStatusBadge() {

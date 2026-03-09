@@ -297,16 +297,51 @@ vaadin-text-field.component-search {
   max-width: 100%;
 }
 
-.quick-component-glyph {
+.quick-component-icon,
+.symbol-readout-icon {
+  display: block;
+  flex: 0 0 auto;
+  color: #35557d;
+  overflow: visible;
+}
+
+.quick-component-icon {
+  width: 30px;
+  height: 18px;
+}
+
+.quick-component-label {
+  line-height: 1;
+}
+
+.active-symbol-readout {
+  gap: 8px;
+  min-width: 0;
+}
+
+.symbol-readout-icon {
+  width: 32px;
+  height: 18px;
+}
+
+.active-symbol-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.active-symbol-key {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
+  min-width: 22px;
   height: 18px;
+  padding: 0 4px;
   border: 1px solid #b8c4d2;
   background: #f5f8fb;
   border-radius: 2px;
-  color: #2f4968;
+  color: #496481;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 10px;
   font-weight: 700;
