@@ -290,15 +290,15 @@ public final class SchematicPreview extends Div {
         frame.content().add(
                 halo(0, 0, 248, 94),
                 symbol("""
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 248 94" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="22" y1="48" x2="40" y2="48"/>
-                          <path d="M40 48c0-10 8-19 19-19s19 9 19 19"/>
-                          <path d="M72 48c0-10 8-19 19-19s19 9 19 19"/>
-                          <path d="M104 48c0-10 8-19 19-19s19 9 19 19"/>
-                          <path d="M136 48c0-10 8-19 19-19s19 9 19 19"/>
-                          <line x1="174" y1="48" x2="226" y2="48"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 248 110" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="22" y1="48" x2="42" y2="48"/>
+                          <path d="M42 48 A16 16 0 0 1 74 48"/>
+                          <path d="M74 48 A16 16 0 0 1 106 48"/>
+                          <path d="M106 48 A16 16 0 0 1 138 48"/>
+                          <path d="M138 48 A16 16 0 0 1 170 48"/>
+                          <line x1="170" y1="48" x2="226" y2="48"/>
                         </svg>
-                        """, 0, 0, 248, 94),
+                        """, 0, 0, 248, 110),
                 pin(element.id(), "A", 22, 48),
                 pin(element.id(), "B", 226, 48),
                 text("component-label", 110, 4, element.id()),
@@ -330,22 +330,21 @@ public final class SchematicPreview extends Div {
         frame.content().add(
                 halo(22, 0, 104, 272),
                 symbol("""
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 336" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="74" y1="46" x2="74" y2="92"/>
-                          <circle cx="74" cy="132" r="40"/>
-                          <line x1="74" y1="172" x2="74" y2="240"/>
-                          <line x1="74" y1="240" x2="74" y2="326"/>
-                          <line x1="66" y1="124" x2="82" y2="124"/>
-                          <line x1="74" y1="116" x2="74" y2="132"/>
-                          <line x1="66" y1="206" x2="82" y2="206"/>
-                          <path d="M44 166c6-6 12-12 18-12s12 6 18 12 12 12 18 12 12-6 18-12"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 334" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="86" y1="46" x2="86" y2="92"/>
+                          <circle cx="86" cy="132" r="40"/>
+                          <line x1="86" y1="172" x2="86" y2="326"/>
+                          <line x1="78" y1="124" x2="94" y2="124"/>
+                          <line x1="86" y1="116" x2="86" y2="132"/>
+                          <line x1="78" y1="206" x2="94" y2="206"/>
+                          <path d="M56 166c6-8 12-16 18-16s12 8 18 16 12 16 18 16 12-8 18-16"/>
                         </svg>
-                        """, 0, 0, 148, 336),
-                pin(element.id(), "POS", 74, 46),
-                pin(element.id(), "NEG", 74, 326),
-                text("component-label", 42, 4, element.id()),
-                text("component-value", 12, 280, element.value() + " V"),
-                text("component-value is-secondary", 26, 300, sourceModeLabel(element)));
+                        """, 0, 0, 172, 334),
+                pin(element.id(), "POS", 86, 46),
+                pin(element.id(), "NEG", 86, 326),
+                text("component-label", 54, 4, element.id()),
+                text("component-value", 18, 280, element.value() + " V"),
+                text("component-value is-secondary", 30, 300, sourceModeLabel(element)));
         return frame.part();
     }
 
@@ -354,20 +353,20 @@ public final class SchematicPreview extends Div {
         frame.content().add(
                 halo(22, 0, 104, 272),
                 symbol("""
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 336" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="74" y1="46" x2="74" y2="92"/>
-                          <circle cx="74" cy="132" r="40"/>
-                          <line x1="74" y1="172" x2="74" y2="326"/>
-                          <line x1="74" y1="122" x2="74" y2="194"/>
-                          <line x1="74" y1="194" x2="64" y2="180"/>
-                          <line x1="74" y1="194" x2="84" y2="180"/>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 334" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="86" y1="46" x2="86" y2="92"/>
+                          <circle cx="86" cy="132" r="40"/>
+                          <line x1="86" y1="172" x2="86" y2="326"/>
+                          <line x1="86" y1="118" x2="86" y2="194"/>
+                          <line x1="86" y1="194" x2="76" y2="180"/>
+                          <line x1="86" y1="194" x2="96" y2="180"/>
                         </svg>
-                        """, 0, 0, 148, 336),
-                pin(element.id(), "POS", 74, 46),
-                pin(element.id(), "NEG", 74, 326),
-                text("component-label", 42, 4, element.id()),
-                text("component-value", 10, 280, formatCurrentValue(element)),
-                text("component-value is-secondary", 26, 300, sourceModeLabel(element)));
+                        """, 0, 0, 172, 334),
+                pin(element.id(), "POS", 86, 46),
+                pin(element.id(), "NEG", 86, 326),
+                text("component-label", 54, 4, element.id()),
+                text("component-value", 18, 280, formatCurrentValue(element)),
+                text("component-value is-secondary", 30, 300, sourceModeLabel(element)));
         return frame.part();
     }
 

@@ -840,8 +840,8 @@ public class WorkspaceMockService {
                 default -> Optional.empty();
             };
             case VOLTAGE, CURRENT -> switch (pinKey) {
-                case "POS" -> Optional.of(pin(element, pinKey, 74, 46, PinDirection.UP));
-                case "NEG" -> Optional.of(pin(element, pinKey, 74, 326, PinDirection.DOWN));
+                case "POS" -> Optional.of(pin(element, pinKey, 86, 46, PinDirection.UP));
+                case "NEG" -> Optional.of(pin(element, pinKey, 86, 326, PinDirection.DOWN));
                 default -> Optional.empty();
             };
             case GROUND -> switch (pinKey) {
