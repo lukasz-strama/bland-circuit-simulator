@@ -1,6 +1,7 @@
 package pl.polsl.bland.webapp.view;
 
 import com.vaadin.flow.component.Component;
+import com.vaadin.flow.component.Svg;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.dom.DomEvent;
@@ -271,15 +272,12 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(0, 0, 220, 94),
-                line("component-line", 22, 48, 38, 48),
-                line("component-line", 38, 48, 58, 28),
-                line("component-line", 58, 28, 78, 68),
-                line("component-line", 78, 68, 98, 28),
-                line("component-line", 98, 28, 118, 68),
-                line("component-line", 118, 68, 138, 28),
-                line("component-line", 138, 28, 158, 68),
-                line("component-line", 158, 68, 178, 28),
-                line("component-line", 178, 28, 198, 48),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 94" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="22" y1="48" x2="38" y2="48"/>
+                          <polyline points="38,48 58,28 78,68 98,28 118,68 138,28 158,68 178,28 198,48"/>
+                        </svg>
+                        """, 0, 0, 220, 94),
                 pin(element.id(), "A", 22, 48),
                 pin(element.id(), "B", 198, 48),
                 text("component-label", 92, 4, element.id()),
@@ -291,12 +289,16 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(0, 0, 248, 94),
-                line("component-line", 22, 48, 40, 48),
-                loop(40, 29, 38),
-                loop(72, 29, 38),
-                loop(104, 29, 38),
-                loop(136, 29, 38),
-                line("component-line", 174, 48, 226, 48),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 248 94" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="22" y1="48" x2="40" y2="48"/>
+                          <path d="M40 48c0-10 8-19 19-19s19 9 19 19"/>
+                          <path d="M72 48c0-10 8-19 19-19s19 9 19 19"/>
+                          <path d="M104 48c0-10 8-19 19-19s19 9 19 19"/>
+                          <path d="M136 48c0-10 8-19 19-19s19 9 19 19"/>
+                          <line x1="174" y1="48" x2="226" y2="48"/>
+                        </svg>
+                        """, 0, 0, 248, 94),
                 pin(element.id(), "A", 22, 48),
                 pin(element.id(), "B", 226, 48),
                 text("component-label", 110, 4, element.id()),
@@ -308,10 +310,14 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(0, 0, 96, 234),
-                line("component-line", 48, 46, 48, 92),
-                line("component-line", 28, 92, 68, 92),
-                line("component-line", 28, 142, 68, 142),
-                line("component-line", 48, 142, 48, 190),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 234" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="48" y1="46" x2="48" y2="92"/>
+                          <line x1="28" y1="92" x2="68" y2="92"/>
+                          <line x1="28" y1="142" x2="68" y2="142"/>
+                          <line x1="48" y1="142" x2="48" y2="190"/>
+                        </svg>
+                        """, 0, 0, 96, 234),
                 pin(element.id(), "A", 48, 46),
                 pin(element.id(), "B", 48, 190),
                 text("component-label", 110, 108, element.id()),
@@ -323,17 +329,18 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(22, 0, 104, 272),
-                line("component-line", 74, 46, 74, 92),
-                circle("component-circle", 34, 92, 80),
-                line("component-line", 74, 116, 74, 132),
-                line("component-line", 66, 124, 82, 124),
-                line("component-line", 66, 206, 82, 206),
-                line("component-line", 44, 166, 56, 154),
-                line("component-line", 56, 154, 74, 166),
-                line("component-line", 74, 166, 92, 178),
-                line("component-line", 92, 178, 104, 166),
-                line("component-line", 74, 172, 74, 240),
-                line("component-line", 74, 240, 74, 326),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 336" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="74" y1="46" x2="74" y2="92"/>
+                          <circle cx="74" cy="132" r="40"/>
+                          <line x1="74" y1="172" x2="74" y2="240"/>
+                          <line x1="74" y1="240" x2="74" y2="326"/>
+                          <line x1="66" y1="124" x2="82" y2="124"/>
+                          <line x1="74" y1="116" x2="74" y2="132"/>
+                          <line x1="66" y1="206" x2="82" y2="206"/>
+                          <path d="M44 166c6-6 12-12 18-12s12 6 18 12 12 12 18 12 12-6 18-12"/>
+                        </svg>
+                        """, 0, 0, 148, 336),
                 pin(element.id(), "POS", 74, 46),
                 pin(element.id(), "NEG", 74, 326),
                 text("component-label", 42, 4, element.id()),
@@ -346,12 +353,16 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(22, 0, 104, 272),
-                line("component-line", 74, 46, 74, 92),
-                circle("component-circle", 34, 92, 80),
-                line("component-line", 74, 122, 74, 194),
-                line("component-line", 74, 194, 64, 180),
-                line("component-line", 74, 194, 84, 180),
-                line("component-line", 74, 172, 74, 326),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 148 336" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="74" y1="46" x2="74" y2="92"/>
+                          <circle cx="74" cy="132" r="40"/>
+                          <line x1="74" y1="172" x2="74" y2="326"/>
+                          <line x1="74" y1="122" x2="74" y2="194"/>
+                          <line x1="74" y1="194" x2="64" y2="180"/>
+                          <line x1="74" y1="194" x2="84" y2="180"/>
+                        </svg>
+                        """, 0, 0, 148, 336),
                 pin(element.id(), "POS", 74, 46),
                 pin(element.id(), "NEG", 74, 326),
                 text("component-label", 42, 4, element.id()),
@@ -364,10 +375,14 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(0, 0, 96, 80),
-                line("component-line", 46, 6, 46, 28),
-                line("component-line", 18, 28, 74, 28),
-                line("component-line", 26, 38, 66, 38),
-                line("component-line", 34, 48, 58, 48),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 80" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="46" y1="6" x2="46" y2="28"/>
+                          <line x1="18" y1="28" x2="74" y2="28"/>
+                          <line x1="26" y1="38" x2="66" y2="38"/>
+                          <line x1="34" y1="48" x2="58" y2="48"/>
+                        </svg>
+                        """, 0, 0, 96, 80),
                 pin(element.id(), "REF", 46, 6),
                 text("component-label", 10, 74, element.id()),
                 text("component-value", 8, 90, element.value()));
@@ -378,10 +393,14 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(0, 0, 180, 94),
-                line("component-line", 18, 48, 52, 48),
-                line("component-line", 128, 48, 162, 48),
-                triangle("component-diode-body", 52, 26, 72, 44),
-                line("component-diode-bar", 128, 20, 128, 76),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 94" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="18" y1="48" x2="52" y2="48"/>
+                          <polygon points="52,26 124,48 52,70"/>
+                          <line x1="128" y1="20" x2="128" y2="76"/>
+                          <line x1="128" y1="48" x2="162" y2="48"/>
+                        </svg>
+                        """, 0, 0, 180, 94),
                 pin(element.id(), "ANODE", 18, 48),
                 pin(element.id(), "CATHODE", 162, 48),
                 text("component-label", 70, 4, element.id()),
@@ -393,15 +412,20 @@ public final class SchematicPreview extends Div {
         PartFrame frame = part(element);
         frame.content().add(
                 halo(0, 0, 220, 148),
-                triangle("component-opamp-body", 48, 18, 112, 112),
-                line("component-line", 0, 54, 48, 54),
-                line("component-line", 0, 94, 48, 94),
-                line("component-line", 160, 74, 220, 74),
+                symbol("""
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 148" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+                          <line x1="0" y1="54" x2="48" y2="54"/>
+                          <line x1="0" y1="94" x2="48" y2="94"/>
+                          <line x1="160" y1="74" x2="220" y2="74"/>
+                          <polygon points="48,18 160,74 48,130"/>
+                          <line x1="18" y1="44" x2="30" y2="44"/>
+                          <line x1="24" y1="38" x2="24" y2="50"/>
+                          <line x1="18" y1="84" x2="30" y2="84"/>
+                        </svg>
+                        """, 0, 0, 220, 148),
                 pin(element.id(), "IN+", 0, 54),
                 pin(element.id(), "IN-", 0, 94),
                 pin(element.id(), "OUT", 220, 74),
-                text("component-marker", 18, 44, "+"),
-                text("component-marker", 18, 84, "-"),
                 text("component-label", 70, 0, element.id()),
                 text("component-value", 64, 136, element.value()));
         return frame.part();
@@ -458,16 +482,12 @@ public final class SchematicPreview extends Div {
         return area("wire-junction", centerX - 4, centerY - 4, 8, 8);
     }
 
-    private static Div loop(double left, double top, double size) {
-        return area("component-loop", left, top, size, size);
-    }
-
-    private static Div circle(String className, double left, double top, double size) {
-        return area(className, left, top, size, size);
-    }
-
-    private static Div triangle(String className, double left, double top, double width, double height) {
-        return area(className, left, top, width, height);
+    private static Svg symbol(String svgMarkup, double left, double top, double width, double height) {
+        Svg svg = new Svg();
+        svg.addClassName("schematic-symbol");
+        svg.setSvg(svgMarkup);
+        setBox(svg, left, top, width, height);
+        return svg;
     }
 
     private static Div area(String className, double left, double top, double width, double height) {
@@ -510,7 +530,7 @@ public final class SchematicPreview extends Div {
         return text;
     }
 
-    private static void setBox(Div component, double left, double top, double width, double height) {
+    private static void setBox(Component component, double left, double top, double width, double height) {
         component.getStyle()
                 .set("left", px(left))
                 .set("top", px(top))
