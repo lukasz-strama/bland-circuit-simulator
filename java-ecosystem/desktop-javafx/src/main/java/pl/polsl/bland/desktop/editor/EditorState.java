@@ -108,5 +108,15 @@ public void endWire(int x, int y) {
                 Instant.now()
         );
     }
+
+    // public void loadFromSchematic(CircuitSchematic schematic) {
+    //     elements = schematic.getElement().stream()
+    //             .map(DrawableElement::new)
+    //             .toList();
+
+    //     wires = schematic.getWire().stream()
+    //             .map(DrawableWire::new)
+    //             .toList();
+    // }
 }
 
