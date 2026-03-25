@@ -9,9 +9,17 @@ import pl.polsl.bland.models.CircuitSchematic;
 import pl.polsl.bland.models.SimulationRequest;
 import pl.polsl.bland.models.SimulationRequest.AnalysisType;
 
-
+/**
+* Parser netlisty zgodnej z ENGINE.CONTRACT.md
+* Mapowanie typów: R - RES, L - IND, C - CAP, V - VSRC, I - ISRC
+*/
 
 public class NetlistParser {
+
+/**
+ * Generuje pełną netlistę na podstawie schematu i parametrów symulacji.
+ * Waliduje schemat, buduje linie elementów i dodaje dyrektywę .SIMULATE.
+ */
 
     public String parse(CircuitSchematic schematic, SimulationRequest request) throws NetlistParseException {
 
@@ -31,7 +39,12 @@ public class NetlistParser {
         return sb.toString();
     }
 
-    // Budowanie linii elementu 
+    // Tworzy pojedynczą 
+
+/**
+ * Tworzy pojedynczą linię netlisty opisującą element (RES, CAP, IND, VSRC, ISRC).
+ * Sprawdza poprawność węzłów i deleguje do metod passive() lub source().
+ */
 
     private String buildElementLine(CircuitElement element) throws NetlistParseException{
         String node1 = sanitizeNode(element.node1(), element.id(), "node1");
@@ -46,7 +59,9 @@ public class NetlistParser {
         };
     }
 
-    // 
+ /**
+ * Buduje linię netlisty dla elementów pasywnych (R, L, C)
+ */
 
     private String passive(String engineType, CircuitElement element, String node1, String node2){
 
@@ -54,7 +69,10 @@ public class NetlistParser {
 
     }
 
-    // 
+/**
+ * Buduje linię netlisty dla źródeł napięcia/prądu (VSRC, ISRC)
+ * Obsługuje typ źródła (dc/sine) oraz częstotliwość dla sygnałów sinusoidalnych
+ */
 
      private String source(String engineType, CircuitElement el, String node1, String node2) {
         String srcType = (el.sourceType() != null)
@@ -70,6 +88,12 @@ public class NetlistParser {
 
         return line;
     }
+
+    /**
+ * Generuje dyrektywę .SIMULATE na podstawie typu analizy (DC lub TRANSIENT)
+ * Dla analizy transient wymaga parametrów tstop i tstep
+ */
+
 
     private String buildSimulateDirective (SimulationRequest request) throws NetlistParseException{
         
@@ -88,6 +112,12 @@ public class NetlistParser {
         };
     }
     
+/**
+ * Sprawdza minimalną poprawność schematu:
+ * - schemat nie jest pusty,
+ * - istnieje węzeł masy "0".
+ */
+
     private void validateSchematic(CircuitSchematic schematic) throws NetlistParseException {
         if(schematic == null) {
             throw new NetlistParseException("Brak schematu");
@@ -106,6 +136,11 @@ public class NetlistParser {
         }
     }
 
+/**
+ * Pobiera wymagany parametr analizy (np. tstop, tstep)
+ * Rzuca wyjątek, jeśli parametr nie istnieje
+ */
+
     private double requireParam(Map<String, Double> params, String key, AnalysisType type) throws NetlistParseException{
         if(params == null || !params.containsKey(key)) {
             throw new NetlistParseException("Analiza wymaga %s parametry \"%s\".".formatted(type, key));
@@ -114,6 +149,10 @@ public class NetlistParser {
         return params.get(key);
     }
 
+/**
+ * Waliduje i normalizuje nazwę węzła (usuwa spacje, sprawdza null/empty)
+ */
+
     private String sanitizeNode(String node, String elementId, String fieldName) throws NetlistParseException {
         if (node == null || node.isBlank()) {
             throw new NetlistParseException(
@@ -121,6 +160,13 @@ public class NetlistParser {
         }
         return node.trim().replace(' ', '_');
     }
+
+/**
+ * Formatuje liczby double zgodnie z wymaganiami silnika:
+ * - kropka dziesiętna (Locale.US),
+ * - notacja naukowa dla bardzo małych/dużych wartości
+ */
+
 
     private String fmt(double v) {
             if (v != 0.0 && (Math.abs(v) < 1e-3 || Math.abs(v) >= 1e6)) {
@@ -131,7 +177,10 @@ public class NetlistParser {
         }
 
 
-    // 
+/**
+ * Wyjątek zgłaszany przy błędach walidacji lub generowania netlisty
+ */
+
 
     public static class NetlistParseException extends Exception {
         public NetlistParseException (String message){
