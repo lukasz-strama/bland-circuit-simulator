@@ -1,0 +1,89 @@
+{
+    "Resistor": {
+        "prefix": [
+            "res",
+            "RES"
+        ],
+        "body": "RES ${1:R1} ${2:N1} ${3:N2} val=${4:1000}",
+        "description": "Resistor – two-terminal resistance [Ohm]"
+    },
+    "Capacitor": {
+        "prefix": [
+            "cap",
+            "CAP"
+        ],
+        "body": "CAP ${1:C1} ${2:N1} ${3:0} val=${4:1e-6}",
+        "description": "Capacitor – two-terminal capacitance [F]"
+    },
+    "Inductor": {
+        "prefix": [
+            "ind",
+            "IND"
+        ],
+        "body": "IND ${1:L1} ${2:N1} ${3:N2} val=${4:1e-3}",
+        "description": "Inductor – two-terminal inductance [H]"
+    },
+    "Voltage Source (sin)": {
+        "prefix": [
+            "vsrc-sin",
+            "VSRC-SIN"
+        ],
+        "body": "VSRC ${1:V1} ${2:N1} ${3:0} type=sin val=${4:10.0} freq=${5:50}",
+        "description": "Sinusoidal voltage source [V, Hz]"
+    },
+    "Voltage Source (dc)": {
+        "prefix": [
+            "vsrc-dc",
+            "VSRC-DC"
+        ],
+        "body": "VSRC ${1:V1} ${2:N1} ${3:0} type=dc val=${4:5.0}",
+        "description": "DC voltage source [V]"
+    },
+    "Current Source (sin)": {
+        "prefix": [
+            "isrc-sin",
+            "ISRC-SIN"
+        ],
+        "body": "ISRC ${1:I1} ${2:N1} ${3:0} type=sin val=${4:1.0} freq=${5:50}",
+        "description": "Sinusoidal current source [A, Hz]"
+    },
+    "Current Source (dc)": {
+        "prefix": [
+            "isrc-dc",
+            "ISRC-DC"
+        ],
+        "body": "ISRC ${1:I1} ${2:N1} ${3:0} type=dc val=${4:1.0}",
+        "description": "DC current source [A]"
+    },
+    "Simulate DC": {
+        "prefix": [
+            ".sim dc",
+            ".SIMULATE DC",
+            "simulate dc"
+        ],
+        "body": ".SIMULATE type=dc",
+        "description": "DC operating point simulation directive"
+    },
+    "Simulate Transient": {
+        "prefix": [
+            ".sim trans",
+            ".SIMULATE TRANS",
+            "simulate transient"
+        ],
+        "body": ".SIMULATE type=trans tstop=${1:0.04} tstep=${2:0.0001}",
+        "description": "Transient simulation directive"
+    },
+    "Comment": {
+        "prefix": [
+            "comment",
+            "*"
+        ],
+        "body": "* ${1:description}",
+        "description": "Line comment"
+    },
+    "Ground Node": {
+        "prefix": "gnd",
+        "body": "0",
+        "description": "Ground reference node (0)"
+    }
+}

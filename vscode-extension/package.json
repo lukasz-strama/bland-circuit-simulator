@@ -1,0 +1,41 @@
+{
+  "name": "bcs",
+  "displayName": "Bland Circuit Simulator",
+  "description": "Syntax highlighting and IntelliSense for .bcs netlist files",
+  "version": "0.1.0",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "main": "./src/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "bcs",
+        "aliases": [
+          "BCS Netlist",
+          "bcs"
+        ],
+        "extensions": [
+          ".bcs"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "bcs",
+        "scopeName": "source.bcs",
+        "path": "./syntaxes/bsc.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "bcs",
+        "path": "./snippets/bcs.json"
+      }
+    ]
+  }
+}

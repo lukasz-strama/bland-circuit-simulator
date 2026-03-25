@@ -1,3 +1,10 @@
+**GUI:** ([Figma](https://www.figma.com/design/NHJp5kacai7WlVIpCGsPPR/BlandDesign?node-id=0-1&m=dev&t=h9QZ9eInxaQkzupD-1))
+
+**URL (POST):** `https://bland-circuit-engine.onrender.com/api/v1/simulate`
+> *(ze względu na darmowy plan, pierwsze zapytanie po dłuższej nieaktywności może zająć kilkanaście sekund).*
+
+---
+
 **1. Tytuł projektu:** Wieloplatformowy system symulacji obwodów elektrycznych RLC w architekturze rozproszonej.
 
 **2. Cel projektu:**
@@ -17,7 +24,7 @@ System będzie oparty na architekturze klient-serwer z wykorzystaniem mikroserwi
     * Wystawienie silnika jako mikroserwisu HTTP (przy użyciu biblioteki Crow) oraz napisanie parsera danych wejściowych.
     * Współtworzenie modułu shared-models w środowisku Java.
 
-* **Osoba 2: Backend i baza danych**
+* **Osoba 2: Backend i baza danych** ([github.com/SCARECROWMANE](https://github.com/SCARECROWMANE))
     * Projekt i wdrożenie bazy danych.
     * Stworzenie REST API do obsługi kont użytkowników i zapisu projektów (JSON).
     * Implementacja klienta HTTP w backendzie.

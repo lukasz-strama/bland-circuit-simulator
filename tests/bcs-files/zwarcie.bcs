@@ -1,0 +1,10 @@
+* zwarcie indukcyjne i węzeł bez masy DC
+
+VSRC V1 IN 0 type=dc val=5.0
+
+IND L_SHORT IN 0 val=10e-3
+
+CAP C1 IN N1 val=1e-6
+CAP C2 N1 0 val=1e-6
+
+.SIMULATE type=trans tstop=0.1 tstep=0.0001

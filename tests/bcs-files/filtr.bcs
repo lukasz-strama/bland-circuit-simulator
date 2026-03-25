@@ -1,0 +1,28 @@
+* 5-rzedowy pasywny filtr dolnoprzepustowy
+
+* na granicy pasma
+VSRC V1 IN 0 type=sin val=10.0 freq=1000
+
+* r wewnetrzna zrodla
+RES R_SRC IN N1 val=1000
+
+* stopien 1
+CAP C1 N1 0 val=100e-9
+
+* stopien 2
+IND L1 N1 N2 val=250e-3
+
+* stopien 3
+CAP C2 N2 0 val=330e-9
+
+* stopien 4
+IND L2 N2 OUT val=250e-3
+
+* stopien 5
+CAP C3 OUT 0 val=100e-9
+
+* obc
+RES R_LOAD OUT 0 val=1000
+
+* 4 milisekundy co 20 mikrosekund
+.SIMULATE type=trans tstop=0.004 tstep=0.00002

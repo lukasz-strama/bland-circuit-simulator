@@ -1,0 +1,8 @@
+VSRC V1 IN 0 type=dc val=5.0
+
+IND L1 IN N2 val=1
+RES R1 IN N1 val=10
+CAP C1 N1 N2 val=1e-6
+RES R2 N2 0 val=100
+
+.SIMULATE type=trans tstop=0.1 tstep=0.0001

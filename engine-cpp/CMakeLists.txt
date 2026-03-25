@@ -41,7 +41,9 @@ set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
 
 FetchContent_MakeAvailable(Crow)
 
-cmake_policy(SET CMP0169 OLD)
+if(POLICY CMP0169)
+    cmake_policy(SET CMP0169 OLD)
+endif()
 FetchContent_GetProperties(Eigen3)
 if(NOT eigen3_POPULATED)
     FetchContent_Populate(Eigen3)
@@ -56,6 +58,7 @@ add_executable(${PROJECT_NAME}
     src/api/handlers.cpp
     src/parser/netlist_parser.cpp
     src/core/solver.cpp
+    src/utils/logger.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)

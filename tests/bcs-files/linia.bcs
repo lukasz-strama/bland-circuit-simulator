@@ -1,0 +1,39 @@
+* model linii transmisyjnej (10 stopni LC)
+VSRC V1 N_IN 0 type=sin val=5.0 freq=1000000
+RES R0 N_IN N_0 val=50
+
+* stopien 1
+IND L1 N_0 N_1 val=1e-6
+CAP C1 N_1 0 val=100e-12
+* stopien 2
+IND L2 N_1 N_2 val=1e-6
+CAP C2 N_2 0 val=100e-12
+* stopien 3
+IND L3 N_2 N_3 val=1e-6
+CAP C3 N_3 0 val=100e-12
+* stopien 4
+IND L4 N_3 N_4 val=1e-6
+CAP C4 N_4 0 val=100e-12
+* stopien 5
+IND L5 N_4 N_5 val=1e-6
+CAP C5 N_5 0 val=100e-12
+* stopien 6
+IND L6 N_5 N_6 val=1e-6
+CAP C6 N_6 0 val=100e-12
+* stopien 7
+IND L7 N_6 N_7 val=1e-6
+CAP C7 N_7 0 val=100e-12
+* stopien 8
+IND L8 N_7 N_8 val=1e-6
+CAP C8 N_8 0 val=100e-12
+* stopien 9
+IND L9 N_8 N_9 val=1e-6
+CAP C9 N_9 0 val=100e-12
+* stopien 10
+IND L10 N_9 N_OUT val=1e-6
+CAP C10 N_OUT 0 val=100e-12
+
+* dopasowane obc
+RES R_LOAD N_OUT 0 val=50
+
+.SIMULATE type=trans tstop=0.000005 tstep=0.000000001
