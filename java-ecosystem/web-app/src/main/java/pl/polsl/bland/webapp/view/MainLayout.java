@@ -39,6 +39,13 @@ public class MainLayout extends Div {
     private static final double ZOOM_STEP = 0.08;
     private static final double MOVE_STEP = 16;
     private static final double DRAG_THRESHOLD = 6;
+    private static final List<QuickComponent> VISIBLE_QUICK_COMPONENTS = List.of(
+            QuickComponent.RESISTOR,
+            QuickComponent.CAPACITOR,
+            QuickComponent.INDUCTOR,
+            QuickComponent.VOLTAGE,
+            QuickComponent.CURRENT,
+            QuickComponent.GROUND);
 
     private final WorkspaceMockService workspaceMockService;
     private final BackendClient backendClient;
@@ -173,7 +180,6 @@ public class MainLayout extends Div {
         configureNetNameField();
         configureWireRoutingSelect();
         configureHistoryButtons();
-        configureProjectButtons();
         configureFloatingWindows();
         configureSimulationSettingsWindow();
 
@@ -257,11 +263,6 @@ public class MainLayout extends Div {
         undoButton.addClickListener(event -> undoWorkspaceChange());
         redoButton.addClickListener(event -> redoWorkspaceChange());
         updateHistoryControls();
-    }
-
-    private void configureProjectButtons() {
-        loadProjectButton.addClickListener(event -> loadSavedProject());
-        updateProjectControls();
     }
 
     private void configureFloatingWindows() {
@@ -2061,7 +2062,7 @@ public class MainLayout extends Div {
 
         Div meta = new Div();
         meta.addClassName("menubar-meta");
-        meta.add(new Span("Projekt: filtr_rlc_lab.asc"));
+        meta.add(new Span("Projekt: " + PROJECT_FILE_NAME));
         meta.add(new Span("Arkusz 1 / 1"));
         menuBar.add(meta);
         return menuBar;
@@ -2141,14 +2142,12 @@ public class MainLayout extends Div {
     private Div buildToolbar() {
         Div toolbar = new Div();
         toolbar.addClassName("toolbar");
-        Div primaryRow = buildToolbarRow();
-        Div secondaryRow = buildToolbarRow();
 
         Span newProject = createAction("Nowy", "tool-button");
         newProject.addClickListener(event -> resetWorkspace());
 
-        Span saveProject = createAction("Zapisz", "tool-button");
-        saveProject.addClickListener(event -> saveCurrentProject());
+        Span saveProject = createAction("Zapisz", "tool-button", "is-disabled");
+        Span exportProject = createAction("Eksport", "tool-button", "is-disabled");
 
         Span simulate = createAction("Symuluj", "tool-button", "is-primary");
         simulate.addClickListener(event -> runSimulation());
@@ -2225,78 +2224,36 @@ public class MainLayout extends Div {
         help.addClickListener(event -> statusMessageValue.setText(
                 "Zaznacz element, aby go przesuwać lub obracać. Zaznacz przewód, aby przepiąć jego początek lub koniec."));
 
-        primaryRow.add(buildToolbarGroup(
+        toolbar.add(buildToolbarGroup(
                 newProject,
-                undoButton,
-                redoButton,
                 saveProject,
-                loadProjectButton,
+                exportProject,
                 simulate,
                 showResults));
-
-        primaryRow.add(separator());
-        primaryRow.add(buildToolbarGroup(
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(
                 createLabel("Analiza"),
                 analysisConfigReadout,
                 simulationSettingsButton));
-
-        primaryRow.add(separator());
-        primaryRow.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
-
-        primaryRow.add(separator());
-        primaryRow.add(buildToolbarGroup(
-                createLabel("Element"),
-                selectedElementReadout,
-                rotateElement,
-                elementValueField,
-                applyElementValue,
-                resetElementValue));
-
-        secondaryRow.add(buildToolbarGroup(createLabel("Net"), selectedNetReadout, netNameField, renameNet, resetNetName));
-
-        secondaryRow.add(separator());
-        secondaryRow.add(buildToolbarGroup(
-                createLabel("Źródło"),
-                sourceTypeSelect,
-                sourceFrequencyField,
-                applySourceSettings,
-                resetSourceSettings));
-
-        secondaryRow.add(separator());
-        secondaryRow.add(buildToolbarGroup(
-                createLabel("Przewód"),
-                wireRoutingSelect,
-                selectedWireReadout,
-                wireEditModeReadout,
-                rewireStart,
-                rewireEnd,
-                cancelRewire));
-
-        secondaryRow.add(separator());
-        secondaryRow.add(buildToolbarGroup(createLabel("Przesuń"), moveLeft, moveUp, moveDown, moveRight));
-
-        secondaryRow.add(separator());
-        secondaryRow.add(buildToolbarGroup(
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(
                 zoomOut,
                 zoomReadout,
                 zoomIn,
                 fitView,
                 zoom100));
-
-        secondaryRow.add(separator());
-        secondaryRow.add(buildToolbarGroup(buildStatusBadge()));
-
-        secondaryRow.add(separator());
-        secondaryRow.add(buildToolbarGroup(help));
-        toolbar.add(primaryRow, secondaryRow);
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(buildStatusBadge()));
+        toolbar.add(separator());
+        toolbar.add(buildToolbarGroup(help));
         return toolbar;
     }
 
     private Div buildComponentBar() {
         Div componentBar = new Div();
         componentBar.addClassName("componentbar");
-        Div primaryRow = buildComponentRow();
-        Div secondaryRow = buildComponentRow();
 
         Span openLibrary = createAction("Komponent...", "tool-button");
         openLibrary.addClickListener(event -> {
@@ -2304,26 +2261,17 @@ public class MainLayout extends Div {
             statusMessageValue.setText("Filtruj bibliotekę szybką albo kliknij symbol, aby aktywować tryb wstawiania.");
         });
 
-        primaryRow.add(buildComponentGroup(openLibrary, createLabel("Biblioteka")));
-        primaryRow.add(buildComponentGroup(
-                createQuickComponent(QuickComponent.RESISTOR),
-                createQuickComponent(QuickComponent.CAPACITOR),
-                createQuickComponent(QuickComponent.INDUCTOR),
-                createQuickComponent(QuickComponent.VOLTAGE),
-                createQuickComponent(QuickComponent.CURRENT),
-                createQuickComponent(QuickComponent.GROUND),
-                createQuickComponent(QuickComponent.DIODE),
-                createQuickComponent(QuickComponent.OPAMP)));
+        componentBar.add(buildComponentGroup(openLibrary, createLabel("Biblioteka")));
+        Div quickComponents = buildComponentGroup();
+        VISIBLE_QUICK_COMPONENTS.forEach(component -> quickComponents.add(createQuickComponent(component)));
+        componentBar.add(quickComponents);
 
-        Span openLibraryDialog = createAction("Otwórz bibliotekę", "mini-button");
-        openLibraryDialog.addClickListener(event -> statusMessageValue.setText("Pełna biblioteka pojawi się w kolejnym etapie prac."));
+        Span openLibraryDialog = createAction("Otwórz bibliotekę", "mini-button", "is-disabled");
 
         Div fillGroup = buildComponentGroup(componentSearch, openLibraryDialog);
         fillGroup.addClassName("is-fill");
-        secondaryRow.add(fillGroup);
-
-        secondaryRow.add(buildComponentGroup(createLabel("Aktywny symbol"), activeSymbolReadout));
-        componentBar.add(primaryRow, secondaryRow);
+        componentBar.add(fillGroup);
+        componentBar.add(buildComponentGroup(createLabel("Aktywny symbol"), activeSymbolReadout));
         return componentBar;
     }
 
@@ -2378,25 +2326,11 @@ public class MainLayout extends Div {
         return group;
     }
 
-    private Div buildToolbarRow(Component... children) {
-        Div row = new Div();
-        row.addClassName("toolbar-row");
-        row.add(children);
-        return row;
-    }
-
     private Div buildComponentGroup(Component... children) {
         Div group = new Div();
         group.addClassName("componentbar-group");
         group.add(children);
         return group;
-    }
-
-    private Div buildComponentRow(Component... children) {
-        Div row = new Div();
-        row.addClassName("componentbar-row");
-        row.add(children);
-        return row;
     }
 
     private Div separator() {
@@ -2488,7 +2422,7 @@ public class MainLayout extends Div {
         activeSymbolReadout.add(createComponentIcon(component, "symbol-readout-icon"), label, key);
     }
 
-    private Svg createComponentIcon(QuickComponent component, String className) {
+    private Component createComponentIcon(QuickComponent component, String className) {
         Svg icon = new Svg();
         icon.addClassName(className);
         icon.getElement().setAttribute("aria-hidden", "true");
@@ -2526,11 +2460,9 @@ public class MainLayout extends Div {
                     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 36 20" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
                       <line x1="1" y1="10" x2="7" y2="10"/>
                       <circle cx="18" cy="10" r="8"/>
-                      <line x1="18" y1="2" x2="18" y2="4.5"/>
-                      <line x1="18" y1="15.5" x2="18" y2="18"/>
-                      <line x1="18" y1="6.5" x2="18" y2="11.5"/>
-                      <line x1="15.5" y1="9" x2="20.5" y2="9"/>
-                      <line x1="15.5" y1="13" x2="20.5" y2="13"/>
+                      <path d="M12.5 10
+                               C14 7.6 16 7.6 17.5 10
+                               C19 12.4 21 12.4 22.5 10"/>
                       <line x1="29" y1="10" x2="35" y2="10"/>
                     </svg>
                     """;

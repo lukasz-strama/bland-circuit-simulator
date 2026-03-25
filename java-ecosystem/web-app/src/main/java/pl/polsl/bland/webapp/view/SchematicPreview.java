@@ -235,13 +235,13 @@ public final class SchematicPreview extends Div {
         block.add(
                 hLine("title-divider", 0, 28, 392),
                 hLine("title-divider", 0, 56, 392),
-                vLine("title-divider is-vertical", 266, 28, 58),
-                vLine("title-divider is-vertical", 326, 56, 30),
-                text("sheet-text", 14, 8, "Projekt: Filtr RLC - ćwiczenie 04"),
-                text("sheet-text", 14, 36, "Autor: Laboratorium EE / grupa A2"),
-                text("sheet-text", 280, 36, "Arkusz: 1 / 1"),
-                text("sheet-text", 14, 64, "Tryb: makieta edytowalna"),
-                text("sheet-text", 338, 64, "Skala: 1:1"));
+                vLine("title-divider is-vertical", 298, 28, 58),
+                vLine("title-divider is-vertical", 332, 56, 30),
+                titleText(14, 8, 364, "Projekt: Filtr RLC - ćwiczenie 04"),
+                titleText(14, 36, 276, "Autor: Laboratorium EE / grupa A2"),
+                titleText(308, 36, 76, "Arkusz: 1 / 1"),
+                titleText(14, 64, 310, "Tryb: makieta edytowalna"),
+                titleText(340, 64, 44, "Skala: 1:1"));
         return block;
     }
 
@@ -334,10 +334,10 @@ public final class SchematicPreview extends Div {
                           <line x1="86" y1="46" x2="86" y2="92"/>
                           <circle cx="86" cy="132" r="40"/>
                           <line x1="86" y1="172" x2="86" y2="326"/>
-                          <line x1="78" y1="124" x2="94" y2="124"/>
-                          <line x1="86" y1="116" x2="86" y2="132"/>
-                          <line x1="78" y1="206" x2="94" y2="206"/>
-                          <path d="M56 166c6-8 12-16 18-16s12 8 18 16 12 16 18 16 12-8 18-16"/>
+                          <path d="M62 132
+                                   C68 120 78 120 84 132
+                                   C90 144 100 144 106 132
+                                   C112 120 122 120 128 132"/>
                         </svg>
                         """, 0, 0, 172, 334),
                 pin(element.id(), "POS", 86, 46),
@@ -529,6 +529,12 @@ public final class SchematicPreview extends Div {
         return text;
     }
 
+    private static Span titleText(double left, double top, double width, String value) {
+        Span text = text("sheet-text sheet-title-text", left, top, value);
+        text.getStyle().set("width", px(width));
+        return text;
+    }
+
     private static void setBox(Component component, double left, double top, double width, double height) {
         component.getStyle()
                 .set("left", px(left))
@@ -566,6 +572,7 @@ public final class SchematicPreview extends Div {
 
     private record PartFrame(Div part, Div content) {
     }
+
 
     public interface InteractionHandler {
         void onCanvasClick(double canvasX, double canvasY);
