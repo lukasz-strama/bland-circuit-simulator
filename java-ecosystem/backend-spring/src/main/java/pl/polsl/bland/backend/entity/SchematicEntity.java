@@ -4,7 +4,7 @@ import jakarta.persistence.*;
 import java.time.Instant;
 
 @Entity
-@Table(name = "schematics")
+@Table(name = "projects")
 public class SchematicEntity {
 
     @Id
@@ -15,54 +15,47 @@ public class SchematicEntity {
     private String name;
 
     @Column(columnDefinition = "TEXT")
-    private String schematicJson;
+    private String elementsJson;
+
+    @Column(columnDefinition = "TEXT")
+    private String wiresJson;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "owner_id")
+    @JoinColumn(name = "owner_id", nullable = false)
     private UserEntity owner;
 
     @Column(nullable = false, updatable = false)
     private Instant createdAt;
 
+    @Column(nullable = false)
+    private Instant updatedAt;
+
     protected SchematicEntity() {
     }
 
-    public SchematicEntity(String name, String schematicJson, UserEntity owner) {
+    public SchematicEntity(String name, String elementsJson, String wiresJson, UserEntity owner) {
         this.name = name;
-        this.schematicJson = schematicJson;
+        this.elementsJson = elementsJson;
+        this.wiresJson = wiresJson;
         this.owner = owner;
         this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
     }
 
-    public Long getId() {
-        return id;
+    @PreUpdate
+    private void onUpdate() {
+        this.updatedAt = Instant.now();
     }
 
-    public String getName() {
-        return name;
-    }
+    public Long getId() { return id; }
+    public String getName() { return name; }
+    public String getElementsJson() { return elementsJson; }
+    public String getWiresJson() { return wiresJson; }
+    public UserEntity getOwner() { return owner; }
+    public Instant getCreatedAt() { return createdAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
 
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public String getSchematicJson() {
-        return schematicJson;
-    }
-
-    public void setSchematicJson(String schematicJson) {
-        this.schematicJson = schematicJson;
-    }
-
-    public UserEntity getOwner() {
-        return owner;
-    }
-
-    public void setOwner(UserEntity owner) {
-        this.owner = owner;
-    }
-
-    public Instant getCreatedAt() {
-        return createdAt;
-    }
+    public void setName(String name) { this.name = name; }
+    public void setElementsJson(String elementsJson) { this.elementsJson = elementsJson; }
+    public void setWiresJson(String wiresJson) { this.wiresJson = wiresJson; }
 }
