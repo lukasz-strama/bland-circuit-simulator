@@ -8,11 +8,14 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.time.Duration;
 
 @Service
 public class EngineClient {
 
-    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(30))
+            .build();
     private final String engineUrl;
     private final String apiKey;
 
@@ -29,6 +32,7 @@ public class EngineClient {
                     .uri(URI.create(engineUrl))
                     .header("Content-Type", "text/plain; charset=utf-8")
                     .header("X-Engine-API-Key", apiKey)
+                    .timeout(Duration.ofSeconds(60))
                     .POST(HttpRequest.BodyPublishers.ofString(netlist))
                     .build();
 
@@ -39,8 +43,10 @@ public class EngineClient {
             }
 
             return response.body();
-        } catch (IOException | InterruptedException e) {
+        } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            throw new EngineException(500, "Engine request interrupted: " + e.getMessage());
+        } catch (IOException e) {
             throw new EngineException(500, "Engine unreachable: " + e.getMessage());
         }
     }
