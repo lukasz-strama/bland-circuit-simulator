@@ -23,6 +23,7 @@ public class MainView extends BorderPane {
     private int historyIndex = -1;
 
     private final Canvas canvas = new Canvas(1280, 860);
+    private final Tooltip hoverTooltip = new Tooltip();
     private final GraphicsContext gc = canvas.getGraphicsContext2D();
 
     private final CanvasRenderer renderer;
@@ -72,6 +73,26 @@ public class MainView extends BorderPane {
             }
         });
 
+        canvas.addEventHandler(MouseEvent.MOUSE_MOVED, e -> {
+            double worldX = e.getX() / zoom;
+            double worldY = e.getY() / zoom;
+
+            var el = controller.findElementAt(worldX, worldY);
+
+            if (el != null) {
+                hoverTooltip.setText(
+                        "Typ: " + el.type() + "\n" +
+                        "Nazwa: " + el.id() + "\n" +
+                        "Wartość: " + el.value() 
+                );
+                Tooltip.install(canvas, hoverTooltip);
+            } else {
+                Tooltip.uninstall(canvas, hoverTooltip);
+            }
+        });
+
+
+
         elements.putAll(workspace.createInitialWorkspace());
         wires.putAll(workspace.createInitialWires());
 
@@ -107,6 +128,7 @@ public class MainView extends BorderPane {
 
         return sp;
     }
+    
 
     private MenuBar createMenuBar() {
         MenuItem miNew = new MenuItem("Nowy projekt");
@@ -332,6 +354,9 @@ public class MainView extends BorderPane {
         wires.putAll(snap.wires());
         refresh();
     }
+
+
+
 
     private record WorkspaceSnapshot(
             Map<String, WorkspaceService.WorkspaceElement> elements,
