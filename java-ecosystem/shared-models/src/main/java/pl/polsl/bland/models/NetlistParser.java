@@ -54,8 +54,8 @@ public class NetlistParser {
             case R -> passive("RES", element, node1, node2);
             case L -> passive("IND", element, node1, node2);
             case C -> passive("CAP", element, node1, node2);
-            case V -> passive("VSRC", element, node1, node2);
-            case I -> passive("ISRC", element, node1, node2);
+            case V -> source("VSRC", element, node1, node2);
+            case I -> source("ISRC", element, node1, node2);
         };
     }
 
