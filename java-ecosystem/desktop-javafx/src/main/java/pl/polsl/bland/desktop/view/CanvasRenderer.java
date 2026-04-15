@@ -2,6 +2,7 @@ package pl.polsl.bland.desktop.view;
 
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.paint.Color;
+import javafx.scene.shape.ArcType;
 import pl.polsl.bland.desktop.service.WorkspaceService;
 
 import java.util.Collection;
@@ -95,25 +96,34 @@ public class CanvasRenderer {
     }
 
     private void drawInductor(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x + 70, y);
-        gc.strokeOval(x + 10, y - 10, 15, 20);
-        gc.strokeOval(x + 25, y - 10, 15, 20);
-        gc.strokeOval(x + 40, y - 10, 15, 20);
-    }
+    gc.strokeLine(x, y, x + 70, y);
+    gc.strokeArc(x + 10, y - 10, 15, 20, 0, 180, ArcType.OPEN);
+    gc.strokeArc(x + 25, y - 10, 15, 20, 0, 180, ArcType.OPEN);
+    gc.strokeArc(x + 40, y - 10, 15, 20, 0, 180, ArcType.OPEN);
+}
 
     private void drawVoltage(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x, y + 50);
-        gc.strokeOval(x - 10, y + 15, 20, 20);
-        gc.strokeLine(x - 5, y + 25, x + 5, y + 25);
-        gc.strokeLine(x, y + 20, x, y + 30);
-    }
+    gc.strokeLine(x, y, x, y + 50);
 
-    private void drawCurrent(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x, y + 50);
-        gc.strokeOval(x - 10, y + 15, 20, 20);
-        gc.strokeLine(x, y + 20, x, y + 30);
-        gc.strokeLine(x - 5, y + 25, x + 5, y + 25);
-    }
+    gc.strokeOval(x - 10, y + 15, 20, 20);
+
+    gc.strokeLine(x, y + 18, x, y + 32); 
+    gc.strokeLine(x, y + 32, x - 3, y + 28);  
+    gc.strokeLine(x, y + 32, x + 3, y + 28);   
+}
+
+
+private void drawCurrent(GraphicsContext gc, double x, double y) {
+
+    gc.strokeLine(x, y, x, y + 50);
+    gc.strokeOval(x - 10, y + 15, 20, 20);
+    gc.strokeOval(x - 7, y + 18, 14, 14);
+    gc.strokeLine(x, y + 19, x, y + 31);
+    gc.strokeLine(x, y + 31, x - 3, y + 27);
+    gc.strokeLine(x, y + 31, x + 3, y + 27);
+
+}
+
 
     private void drawGround(GraphicsContext gc, double x, double y) {
         gc.strokeLine(x - 10, y, x + 10, y);
