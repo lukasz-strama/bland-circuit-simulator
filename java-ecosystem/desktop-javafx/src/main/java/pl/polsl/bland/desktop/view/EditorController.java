@@ -205,4 +205,13 @@ public class EditorController {
                 ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
         return distance(px, py, x1 + t * dx, y1 + t * dy);
     }
+
+    public WorkspaceService.WorkspaceElement findElementAt(double x, double y) {
+        for (var el : elements.values()) {
+            if (hit(el, x, y)) {
+                return el;
+            }
+        }
+        return null;
+    }
 }
