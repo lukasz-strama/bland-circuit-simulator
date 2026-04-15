@@ -1,5 +1,6 @@
 package pl.polsl.bland.backend.service;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
@@ -12,14 +13,22 @@ import java.net.http.HttpResponse;
 public class EngineClient {
 
     private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final String engineUrl;
+    private final String apiKey;
 
-    private static final String ENGINE_URL = "http://localhost:8081/api/v1/simulate";
+    public EngineClient(
+            @Value("${engine.url:http://localhost:8081/api/v1/simulate}") String engineUrl,
+            @Value("${engine.api-key:supersecretkey123}") String apiKey) {
+        this.engineUrl = engineUrl;
+        this.apiKey = apiKey;
+    }
 
     public String simulate(String netlist) {
         try {
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ENGINE_URL))
+                    .uri(URI.create(engineUrl))
                     .header("Content-Type", "text/plain; charset=utf-8")
+                    .header("X-Engine-API-Key", apiKey)
                     .POST(HttpRequest.BodyPublishers.ofString(netlist))
                     .build();
 
