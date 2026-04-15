@@ -30,6 +30,9 @@ public class MainView extends BorderPane {
     private final EditorController controller;
     private final PropertiesPanel propertiesPanel;
 
+    private double lastMouseX = 0;
+    private double lastMouseY = 0;
+
     private double zoom = 1.0;
     private final Label lblZoom = new Label("100%");
 
@@ -74,6 +77,9 @@ public class MainView extends BorderPane {
         });
 
         canvas.addEventHandler(MouseEvent.MOUSE_MOVED, e -> {
+            lastMouseX = e.getX() / zoom;
+            lastMouseY = e.getY() / zoom;
+
             double worldX = e.getX() / zoom;
             double worldY = e.getY() / zoom;
 
@@ -91,6 +97,41 @@ public class MainView extends BorderPane {
             }
         });
 
+
+        setOnKeyPressed(e -> {
+    switch (e.getCode()) {
+
+        case Z -> {
+            if (e.isControlDown()) undo();
+        }
+
+        case Y -> {
+            if (e.isControlDown()) redo();
+        }
+
+        case W -> setActiveTool(WorkspaceTool.WIRE);
+
+        case S -> setActiveTool(WorkspaceTool.SELECT);
+
+        case X -> setActiveTool(WorkspaceTool.DELETE);
+
+        case R -> {
+            var el = controller.findElementAt(lastMouseX, lastMouseY);
+            if (el != null) {
+                elements.put(el.id(), workspace.rotateElement(el));
+                refreshAndRecord();
+            } else {
+                activateComponentPlacement(QuickComponent.RESISTOR);
+            }
+        }
+
+        case C -> activateComponentPlacement(QuickComponent.CAPACITOR);
+        case L -> activateComponentPlacement(QuickComponent.INDUCTOR);
+        case V -> activateComponentPlacement(QuickComponent.VOLTAGE);
+        case I -> activateComponentPlacement(QuickComponent.CURRENT);
+        case G -> activateComponentPlacement(QuickComponent.GROUND);
+    }
+});
 
 
         elements.putAll(workspace.createInitialWorkspace());
@@ -173,6 +214,8 @@ public class MainView extends BorderPane {
         Button btnSave = new Button("Zapisz");
         Button btnUndo = new Button("↩ Cofnij");
         Button btnRedo = new Button("↪ Ponów");
+        btnUndo.setTooltip(new Tooltip("Cofnij (Ctrl+Z)"));
+        btnRedo.setTooltip(new Tooltip("Ponów (Ctrl+Y)"));
 
         btnNew.setOnAction(e -> resetWorkspace());
         btnUndo.setOnAction(e -> undo());
@@ -213,6 +256,7 @@ public class MainView extends BorderPane {
         for (QuickComponent qc : QuickComponent.values()) {
             Button btn = new Button(qc.glyph() + " " + qc.label());
             btn.setOnAction(e -> activateComponentPlacement(qc));
+            btn.setTooltip(new Tooltip(qc.label() + " (" + qc.glyph() + ")"));
             componentButtons.put(qc, btn);
             bar.getChildren().add(btn);
         }
@@ -234,6 +278,7 @@ public class MainView extends BorderPane {
                 WorkspaceTool.SELECT,
                 WorkspaceTool.WIRE,
                 WorkspaceTool.DELETE
+
         }) {
             ToggleButton btn = new ToggleButton(tool.shortLabel());
             btn.setToggleGroup(toolGroup);
@@ -241,7 +286,11 @@ public class MainView extends BorderPane {
             btn.setOnAction(e -> setActiveTool(tool));
             toolButtons.put(tool, btn);
             rail.getChildren().add(btn);
-        }
+}
+            toolButtons.get(WorkspaceTool.SELECT).setTooltip(new Tooltip("Zaznacz (S)"));
+            toolButtons.get(WorkspaceTool.WIRE).setTooltip(new Tooltip("Rysuj przewody (W)"));
+            toolButtons.get(WorkspaceTool.DELETE).setTooltip(new Tooltip("Usuń (X)"));
+            
 
         return rail;
     }
@@ -271,6 +320,9 @@ public class MainView extends BorderPane {
         refresh();
     }
 
+    
+
+
     private void refresh() {
         gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
         renderer.render(gc, elements, wires.values(), null, zoom, null, null);
@@ -289,7 +341,7 @@ public class MainView extends BorderPane {
     }
 
     private void setActiveTool(WorkspaceTool tool) {
-        activeComponent = null; // 🔥 wyłącz tryb wstawiania
+        activeComponent = null;
         controller.setTool(tool);
         ToggleButton btn = toolButtons.get(tool);
         if (btn != null) btn.setSelected(true);
