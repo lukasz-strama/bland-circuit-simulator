@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 
+#include "core/errors.hpp"
 #include "core/solver.hpp"
 #include "parser/netlist_parser.hpp"
 
@@ -143,8 +144,18 @@ crow::response handle_simulate(const crow::request &req) {
         crow::response resp(200, csv);
         resp.set_header("Content-Type", "text/csv; charset=utf-8");
         return resp;
+    } catch (const core::ParseError &e) {
+        crow::response resp(400, e.what());
+        resp.set_header("Content-Type", "text/plain; charset=utf-8");
+        return resp;
+    } catch (const core::SimulationError &e) {
+        crow::response resp(422, e.what());
+        resp.set_header("Content-Type", "text/plain; charset=utf-8");
+        return resp;
     } catch (const std::exception &e) {
-        return crow::response(400, e.what());
+        crow::response resp(500, std::string("Internal engine error: ") + e.what());
+        resp.set_header("Content-Type", "text/plain; charset=utf-8");
+        return resp;
     }
 }
 
