@@ -4,6 +4,7 @@
 #include <iomanip>
 #include <sstream>
 
+#include "core/errors.hpp"
 #include "core/solver.hpp"
 #include "parser/netlist_parser.hpp"
 
@@ -99,6 +100,21 @@ static ExtractResult extract_sim_params(const std::string &netlist) {
 
 crow::response handle_simulate(const crow::request &req) {
     try {
+        const char *expected_key = std::getenv("ENGINE_API_KEY");
+        if (expected_key != nullptr && expected_key[0] != '\0') {
+            auto api_key = req.get_header_value("X-Engine-API-Key");
+            if (api_key.empty()) {
+                crow::response resp(401, "Missing X-Engine-API-Key header");
+                resp.set_header("Content-Type", "text/plain; charset=utf-8");
+                return resp;
+            }
+            if (api_key != std::string(expected_key)) {
+                crow::response resp(401, "Invalid API key");
+                resp.set_header("Content-Type", "text/plain; charset=utf-8");
+                return resp;
+            }
+        }
+
         const std::string &netlist = req.body;
 
         if (netlist.empty()) {
@@ -128,8 +144,18 @@ crow::response handle_simulate(const crow::request &req) {
         crow::response resp(200, csv);
         resp.set_header("Content-Type", "text/csv; charset=utf-8");
         return resp;
+    } catch (const core::ParseError &e) {
+        crow::response resp(400, e.what());
+        resp.set_header("Content-Type", "text/plain; charset=utf-8");
+        return resp;
+    } catch (const core::SimulationError &e) {
+        crow::response resp(422, e.what());
+        resp.set_header("Content-Type", "text/plain; charset=utf-8");
+        return resp;
     } catch (const std::exception &e) {
-        return crow::response(400, e.what());
+        crow::response resp(500, std::string("Internal engine error: ") + e.what());
+        resp.set_header("Content-Type", "text/plain; charset=utf-8");
+        return resp;
     }
 }
 
