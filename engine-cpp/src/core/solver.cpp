@@ -2,11 +2,11 @@
 
 #include <cmath>
 #include <numbers>
-#include <stdexcept>
 #include <string>
 
 #include <Eigen/Dense>
 
+#include "core/errors.hpp"
 #include "core/types.hpp"
 #include "utils/logger.hpp"
 
@@ -175,7 +175,7 @@ SimulationResult solve_dc(const Circuit &circuit) {
     Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(A);
     if (!qr.isInvertible()) {
         LOG_ERROR("Singular MNA matrix in DC analysis");
-        throw std::runtime_error(
+        throw core::SimulationError(
             "Singular matrix. Possible causes: short circuit of ideal "
             "voltage sources, floating node, missing ground reference, "
             "or open circuit with no DC path.");
@@ -308,7 +308,7 @@ SimulationResult solve_transient(const Circuit &circuit, double t_start,
         Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(A);
         if (!qr.isInvertible()) {
             LOG_ERROR("Singular MNA matrix at initial conditions (t=0)");
-            throw std::runtime_error(
+            throw core::SimulationError(
                 "Singular matrix at initial conditions. Possible causes: "
                 "short circuit of ideal voltage sources, floating node, "
                 "missing ground reference, or open circuit with no DC path.");
@@ -438,8 +438,8 @@ SimulationResult solve_transient(const Circuit &circuit, double t_start,
         Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(A);
         if (!qr.isInvertible()) {
             LOG_ERROR("Singular MNA matrix at t=" + std::to_string(t));
-            throw std::runtime_error("Singular matrix at t=" +
-                                     std::to_string(t));
+            throw core::SimulationError("Singular matrix at t=" +
+                                         std::to_string(t));
         }
 
         Eigen::VectorXd x = qr.solve(b);

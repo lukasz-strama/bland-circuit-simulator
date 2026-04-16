@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cctype>
 #include <sstream>
-#include <stdexcept>
 #include <unordered_map>
 
+#include "core/errors.hpp"
 #include "utils/logger.hpp"
 
 namespace parser {
@@ -50,8 +50,8 @@ double require_val(const std::unordered_map<std::string, std::string> &kv,
                    const std::string &component_name) {
     auto it = kv.find("val");
     if (it == kv.end())
-        throw std::runtime_error("Missing parameter 'val' in element " +
-                                 component_name);
+        throw core::ParseError("Missing parameter 'val' in element " +
+                               component_name);
     return std::stod(it->second);
 }
 
@@ -95,7 +95,7 @@ core::Circuit parse_netlist(const std::string &raw) {
             tokens.push_back(tok);
 
         if (tokens.size() < 4)
-            throw std::runtime_error(
+            throw core::ParseError(
                 "Malformed line (need at least TYPE NAME NODE_A NODE_B): " +
                 line);
 
@@ -127,7 +127,7 @@ core::Circuit parse_netlist(const std::string &raw) {
             circuit.components.emplace_back(core::CurrentSource{
                 name, node_a, node_b, src_type, require_val(kv, name), freq});
         } else {
-            throw std::runtime_error("Unknown component type: " + tokens[0]);
+            throw core::ParseError("Unknown component type: " + tokens[0]);
         }
 
         LOG_DEBUG("Parsed component: " + name);

@@ -1,6 +1,7 @@
 package pl.polsl.bland.backend.entity;
 
 import jakarta.persistence.*;
+import java.time.Instant;
 
 @Entity
 @Table(name = "users")
@@ -19,6 +20,9 @@ public class UserEntity {
     @Column(nullable = false)
     private String passwordHash;
 
+    @Column(nullable = false, updatable = false)
+    private Instant createdAt;
+
     protected UserEntity() {
     }
 
@@ -26,33 +30,16 @@ public class UserEntity {
         this.username = username;
         this.email = email;
         this.passwordHash = passwordHash;
+        this.createdAt = Instant.now();
     }
 
-    public Long getId() {
-        return id;
-    }
+    public Long getId() { return id; }
+    public String getUsername() { return username; }
+    public String getEmail() { return email; }
+    public String getPasswordHash() { return passwordHash; }
+    public Instant getCreatedAt() { return createdAt; }
 
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getPasswordHash() {
-        return passwordHash;
-    }
-
-    public void setPasswordHash(String passwordHash) {
-        this.passwordHash = passwordHash;
-    }
+    public void setUsername(String username) { this.username = username; }
+    public void setEmail(String email) { this.email = email; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 }
