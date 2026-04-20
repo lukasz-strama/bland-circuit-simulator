@@ -271,11 +271,12 @@ public final class SchematicPreview extends Div {
     private Component createResistor(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(0, 0, 220, 94),
+                halo(12, 18, 196, 60),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 94" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="22" y1="48" x2="38" y2="48"/>
-                          <polyline points="38,48 58,28 78,68 98,28 118,68 138,28 158,68 178,28 198,48"/>
+                          <line x1="22" y1="48" x2="46" y2="48"/>
+                          <polyline points="46,48 62,28 78,68 94,28 110,68 126,28 142,68 158,28 174,48"/>
+                          <line x1="174" y1="48" x2="198" y2="48"/>
                         </svg>
                         """, 0, 0, 220, 94),
                 pin(element.id(), "A", 22, 48),
@@ -288,15 +289,15 @@ public final class SchematicPreview extends Div {
     private Component createInductor(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(0, 0, 248, 94),
+                halo(12, 16, 224, 64),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 248 110" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
-                          <line x1="22" y1="48" x2="42" y2="48"/>
-                          <path d="M42 48 A16 16 0 0 1 74 48"/>
-                          <path d="M74 48 A16 16 0 0 1 106 48"/>
-                          <path d="M106 48 A16 16 0 0 1 138 48"/>
-                          <path d="M138 48 A16 16 0 0 1 170 48"/>
-                          <line x1="170" y1="48" x2="226" y2="48"/>
+                          <line x1="22" y1="48" x2="46" y2="48"/>
+                          <path d="M46 48 A19.5 19.5 0 0 1 85 48"/>
+                          <path d="M85 48 A19.5 19.5 0 0 1 124 48"/>
+                          <path d="M124 48 A19.5 19.5 0 0 1 163 48"/>
+                          <path d="M163 48 A19.5 19.5 0 0 1 202 48"/>
+                          <line x1="202" y1="48" x2="226" y2="48"/>
                         </svg>
                         """, 0, 0, 248, 110),
                 pin(element.id(), "A", 22, 48),
@@ -309,7 +310,7 @@ public final class SchematicPreview extends Div {
     private Component createCapacitor(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(0, 0, 96, 234),
+                halo(18, 36, 60, 164),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 234" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="48" y1="46" x2="48" y2="92"/>
@@ -328,7 +329,7 @@ public final class SchematicPreview extends Div {
     private Component createVoltageSource(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(22, 0, 104, 272),
+                halo(48, 32, 76, 298),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 334" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="86" y1="46" x2="86" y2="92"/>
@@ -351,7 +352,7 @@ public final class SchematicPreview extends Div {
     private Component createCurrentSource(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(22, 0, 104, 272),
+                halo(48, 32, 76, 298),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172 334" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="86" y1="46" x2="86" y2="92"/>
@@ -373,7 +374,7 @@ public final class SchematicPreview extends Div {
     private Component createGround(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(0, 0, 96, 80),
+                halo(16, 0, 60, 58),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 80" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="46" y1="6" x2="46" y2="28"/>
@@ -391,7 +392,7 @@ public final class SchematicPreview extends Div {
     private Component createDiode(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(0, 0, 180, 94),
+                halo(10, 18, 160, 60),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 180 94" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="18" y1="48" x2="52" y2="48"/>
@@ -410,7 +411,7 @@ public final class SchematicPreview extends Div {
     private Component createOpAmp(WorkspaceMockService.WorkspaceElement element) {
         PartFrame frame = part(element);
         frame.content().add(
-                halo(0, 0, 220, 148),
+                halo(12, 18, 196, 112),
                 symbol("""
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 148" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
                           <line x1="0" y1="54" x2="48" y2="54"/>

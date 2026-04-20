@@ -2,6 +2,7 @@ package pl.polsl.bland.webapp.view;
 
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Svg;
+import com.vaadin.flow.component.AttachEvent;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
@@ -188,6 +189,12 @@ public class MainLayout extends Div {
 
         add(buildAppShell());
         resetWorkspace();
+    }
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        attachEvent.getUI().getLoadingIndicatorConfiguration().setApplyDefaultTheme(false);
     }
 
     private void configureAnalysisSelect() {
@@ -473,10 +480,15 @@ public class MainLayout extends Div {
 
         WorkspaceMockService.WorkspaceElement movedElement =
                 workspaceMockService.moveElement(dragState.originalElement(), deltaX, deltaY);
+        WorkspaceMockService.WorkspaceElement currentElement = workspaceElements.get(elementId);
+        if (currentElement != null
+                && Math.abs(currentElement.left() - movedElement.left()) < 0.01
+                && Math.abs(currentElement.top() - movedElement.top()) < 0.01) {
+            return;
+        }
         workspaceElements.put(elementId, movedElement);
         dragState = new DragState(elementId, dragState.originalElement(), dragState.startCanvasX(), dragState.startCanvasY(), true);
-        refreshWorkspaceState();
-        statusMessageValue.setText("Przeciąganie elementu " + elementId + " po siatce arkusza.");
+        renderWorkspaceDuringDrag();
     }
 
     private void handleElementDragEnd(String elementId, double canvasX, double canvasY) {
@@ -803,6 +815,19 @@ public class MainLayout extends Div {
     }
 
     private void renderWorkspace() {
+        schematicPreview.renderWorkspace(
+                workspaceElements.values(),
+                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode),
+                workspaceNetTopology.nets());
+        schematicPreview.setSelectedElement(selectedElementId);
+        schematicPreview.setDraggingElement(dragState == null ? null : dragState.elementId());
+        schematicPreview.setSelectedWire(selectedWireId);
+        schematicPreview.setSelectedNet(selectedNetKey);
+        schematicPreview.setPendingWireStart(pendingWireStart);
+        schematicPreview.setFocusedPin(resolveFocusedPin());
+    }
+
+    private void renderWorkspaceDuringDrag() {
         schematicPreview.renderWorkspace(
                 workspaceElements.values(),
                 workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode),
