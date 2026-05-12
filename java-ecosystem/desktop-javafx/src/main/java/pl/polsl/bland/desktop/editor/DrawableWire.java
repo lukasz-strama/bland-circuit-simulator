@@ -2,13 +2,20 @@ package pl.polsl.bland.desktop.editor;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import pl.polsl.bland.desktop.service.WorkspaceMockService.WireRoutingMode;
 import pl.polsl.bland.models.Wire;
 
 public class DrawableWire {
     private Wire wire;
+    private WireRoutingMode routingMode = WireRoutingMode.STRAIGHT;
 
     public DrawableWire(Wire wire) {
         this.wire = wire;
+    }
+
+    public void setRoutingMode(WireRoutingMode mode) {
+        this.routingMode = mode;
     }
 
     public Wire getWire() {

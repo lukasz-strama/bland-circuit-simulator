@@ -47,6 +47,11 @@ public class NetlistParser {
  */
 
     private String buildElementLine(CircuitElement element) throws NetlistParseException{
+
+    //     if (element.type() == CircuitElement.ElementType.GROUND) {
+    //     return "RES %s 0 0 val=0".formatted(element.id());
+    // }
+
         String node1 = sanitizeNode(element.node1(), element.id(), "node1");
         String node2 = sanitizeNode(element.node2(), element.id(), "node2");
 
