@@ -4,6 +4,9 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import pl.polsl.bland.desktop.service.WorkspaceService;
+import pl.polsl.bland.models.CircuitSchematic;
+import pl.polsl.bland.models.SimulationRequest;
+import pl.polsl.bland.models.SimulationResult;
 
 import java.util.Map;
 import java.util.function.Consumer;
@@ -187,8 +190,6 @@ public class EditorController {
     return false;
 }
 
-
-
     private boolean hit(WorkspaceService.WorkspaceElement el, double x, double y) {
         return Math.abs(x - el.x()) < 40 && Math.abs(y - el.y()) < 40;
     }
@@ -205,13 +206,15 @@ public class EditorController {
                 ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)));
         return distance(px, py, x1 + t * dx, y1 + t * dy);
     }
-
+  
     public WorkspaceService.WorkspaceElement findElementAt(double x, double y) {
-        for (var el : elements.values()) {
-            if (hit(el, x, y)) {
-                return el;
-            }
+    for (var el : elements.values()) {
+        if (hit(el, x, y)) {
+            return el;
         }
-        return null;
     }
+    return null;
+}
+
+
 }
