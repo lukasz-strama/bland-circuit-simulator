@@ -11,9 +11,14 @@ import java.util.Map;
 public class CanvasRenderer {
 
     private final WorkspaceService workspace;
+    private MainView.WireRoutingMode routingMode = MainView.WireRoutingMode.STRAIGHT;
 
     public CanvasRenderer(WorkspaceService workspace) {
         this.workspace = workspace;
+    }
+
+    public void setRoutingMode(MainView.WireRoutingMode mode) {
+    this.routingMode = mode;
     }
 
     public void render(
@@ -85,39 +90,48 @@ public class CanvasRenderer {
     }
 
     private void drawResistor(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x + 70, y);
+        gc.strokeLine(x, y, x + 20, y);
+        gc.strokeLine(x + 50, y, x + 70, y);
         gc.strokeRect(x + 20, y - 10, 30, 20);
     }
 
     private void drawCapacitor(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x, y + 40);
-        gc.strokeLine(x - 10, y + 20, x + 10, y + 20);
-        gc.strokeLine(x - 10, y + 25, x + 10, y + 25);
+        gc.strokeLine(x, y, x, y + 15);
+        gc.strokeLine(x, y + 25, x, y + 40);
+        gc.strokeLine(x - 12, y + 15, x + 12, y + 15);
+        gc.strokeLine(x - 12, y + 25, x + 12, y + 25);
     }
 
     private void drawInductor(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x + 70, y);
+        gc.strokeLine(x, y, x + 10, y);
+        gc.strokeLine(x + 55, y, x + 70, y);
         gc.strokeArc(x + 10, y - 10, 15, 20, 0, 180, ArcType.OPEN);
         gc.strokeArc(x + 25, y - 10, 15, 20, 0, 180, ArcType.OPEN);
         gc.strokeArc(x + 40, y - 10, 15, 20, 0, 180, ArcType.OPEN);
-    }
+}
 
     private void drawVoltage(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x, y + 50);
-        gc.strokeOval(x - 10, y + 15, 20, 20);
-        gc.strokeLine(x, y + 18, x, y + 32);
-        gc.strokeLine(x, y + 32, x - 3, y + 28);
-        gc.strokeLine(x, y + 32, x + 3, y + 28);
-    }
+    gc.strokeLine(x, y, x, y + 50);
 
-    private void drawCurrent(GraphicsContext gc, double x, double y) {
-        gc.strokeLine(x, y, x, y + 50);
-        gc.strokeOval(x - 10, y + 15, 20, 20);
-        gc.strokeOval(x - 7, y + 18, 14, 14);
-        gc.strokeLine(x, y + 19, x, y + 31);
-        gc.strokeLine(x, y + 31, x - 3, y + 27);
-        gc.strokeLine(x, y + 31, x + 3, y + 27);
-    }
+    gc.strokeOval(x - 10, y + 15, 20, 20);
+
+    gc.strokeLine(x, y + 18, x, y + 32); 
+    gc.strokeLine(x, y + 32, x - 3, y + 28);  
+    gc.strokeLine(x, y + 32, x + 3, y + 28);   
+}
+
+
+private void drawCurrent(GraphicsContext gc, double x, double y) {
+
+    gc.strokeLine(x, y, x, y + 50);
+    gc.strokeOval(x - 10, y + 15, 20, 20);
+    gc.strokeOval(x - 7, y + 18, 14, 14);
+    gc.strokeLine(x, y + 19, x, y + 31);
+    gc.strokeLine(x, y + 31, x - 3, y + 27);
+    gc.strokeLine(x, y + 31, x + 3, y + 27);
+
+}
+
 
     private void drawGround(GraphicsContext gc, double x, double y) {
         gc.strokeLine(x - 10, y, x + 10, y);
@@ -134,16 +148,39 @@ public class CanvasRenderer {
         gc.setLineWidth(2);
 
         for (var w : wires) {
-            var elA = elements.get(w.elementA());
-            var elB = elements.get(w.elementB());
-            if (elA == null || elB == null) continue;
+             var elA = elements.get(w.elementA());
+        var elB = elements.get(w.elementB());
+        if (elA == null || elB == null) continue;
 
-            var pA = elA.pins().stream().filter(p -> p.key().equals(w.pinA())).findFirst().orElse(null);
-            var pB = elB.pins().stream().filter(p -> p.key().equals(w.pinB())).findFirst().orElse(null);
+        var pA = elA.pins().stream().filter(p -> p.key().equals(w.pinA())).findFirst().orElse(null);
+        var pB = elB.pins().stream().filter(p -> p.key().equals(w.pinB())).findFirst().orElse(null);
 
-            if (pA != null && pB != null) {
-                gc.strokeLine(pA.x(), pA.y(), pB.x(), pB.y());
-            }
+        if (pA == null || pB == null) continue;
+
+        double x1 = pA.x();
+        double y1 = pA.y();
+        double x2 = pB.x();
+        double y2 = pB.y();
+
+        
+        if (routingMode == MainView.WireRoutingMode.STRAIGHT) {
+            gc.strokeLine(x1, y1, x2, y2);
+            continue;
+        }
+
+        boolean horizontalFirst = Math.abs(x2 - x1) > Math.abs(y2 - y1);
+
+        if (horizontalFirst) {
+      
+            gc.strokeLine(x1, y1, x2, y1);
+            gc.strokeLine(x2, y1, x2, y2);
+        } else {
+            
+            gc.strokeLine(x1, y1, x1, y2);
+            gc.strokeLine(x1, y2, x2, y2);
         }
     }
 }
+}
+        
+    
