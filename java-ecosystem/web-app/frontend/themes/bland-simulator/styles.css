@@ -568,6 +568,23 @@ vaadin-text-field.component-search {
   margin: 0;
 }
 
+vaadin-text-field.property-field,
+vaadin-select.property-field {
+  width: 100%;
+  --vaadin-input-field-height: 26px;
+  --vaadin-input-field-border-width: 1px;
+  --vaadin-input-field-background: rgba(255, 255, 255, 0.58);
+  font-size: 12px;
+}
+
+.property-value {
+  color: var(--text-main);
+  font-weight: 500;
+  min-height: 26px;
+  line-height: 1.35;
+  white-space: normal;
+}
+
 .settings-grid {
   display: grid;
   grid-template-columns: 92px minmax(0, 1fr);
