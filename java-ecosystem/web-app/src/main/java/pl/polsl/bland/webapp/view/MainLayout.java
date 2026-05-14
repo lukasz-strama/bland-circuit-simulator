@@ -2,16 +2,21 @@ package pl.polsl.bland.webapp.view;
 
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Svg;
+import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.html.Pre;
 import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
+import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import pl.polsl.bland.models.CircuitSchematic;
 import pl.polsl.bland.models.SimulationRequest;
+import pl.polsl.bland.models.UserDto;
 import pl.polsl.bland.webapp.service.BackendClient;
 import pl.polsl.bland.webapp.service.SimulationCsvService;
 import pl.polsl.bland.webapp.service.WorkspaceMockService;
@@ -62,6 +67,10 @@ public class MainLayout extends Div {
     private final Span undoButton = createAction("Cofnij", "tool-button");
     private final Span redoButton = createAction("Ponów", "tool-button");
     private final Span loadProjectButton = createAction("Wczytaj", "tool-button");
+    private final Span backendSessionReadout = createWideReadout("Backend: offline");
+    private final Span backendProjectReadout = createReadout("Projekt DB: -");
+    private final Span backendAuthButton = createAction("Połącz", "mini-button");
+    private final Span backendLogoutButton = createAction("Wyloguj", "mini-button", "is-disabled");
     private final Span toolbarToolValue = createReadout("");
     private final Span selectedElementReadout = createWideReadout("brak");
     private final Span selectedNetReadout = createWideReadout("brak");
@@ -71,6 +80,7 @@ public class MainLayout extends Div {
     private final Span simulationBadgeText = new Span();
     private final Span simulationBadgeDot = new Span();
     private final Span statusSimulationValue = new Span();
+    private final Span statusBackendValue = new Span();
     private final Span statusMessageValue = new Span();
     private final Span statusToolValue = new Span();
     private final Span statusAnalysisValue = new Span();
@@ -99,6 +109,7 @@ public class MainLayout extends Div {
     private String selectedElementId;
     private String selectedWireId;
     private String selectedNetKey;
+    private Long backendProjectId;
     private WorkspaceMockService.PinRef pendingWireStart;
     private WorkspaceMockService.WireEndpoint pendingWireEndpoint;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
@@ -179,6 +190,7 @@ public class MainLayout extends Div {
         configureSourceFrequencyField();
         configureNetNameField();
         configureWireRoutingSelect();
+        configureBackendControls();
         configureHistoryButtons();
         configureFloatingWindows();
         configureSimulationSettingsWindow();
@@ -188,6 +200,12 @@ public class MainLayout extends Div {
 
         add(buildAppShell());
         resetWorkspace();
+    }
+
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        attachEvent.getUI().getLoadingIndicatorConfiguration().setApplyDefaultTheme(false);
     }
 
     private void configureAnalysisSelect() {
@@ -259,6 +277,12 @@ public class MainLayout extends Div {
         });
     }
 
+    private void configureBackendControls() {
+        backendAuthButton.addClickListener(event -> openBackendAuthDialog());
+        backendLogoutButton.addClickListener(event -> logoutFromBackend());
+        updateBackendControls();
+    }
+
     private void configureHistoryButtons() {
         undoButton.addClickListener(event -> undoWorkspaceChange());
         redoButton.addClickListener(event -> redoWorkspaceChange());
@@ -266,6 +290,7 @@ public class MainLayout extends Div {
     }
 
     private void configureFloatingWindows() {
+        propertiesWindow.setApplyChangesHandler(this::applySelectedElementProperties);
         propertiesWindow.setCloseHandler(() -> {
             propertiesWindow.setVisible(false);
             statusMessageValue.setText("Ukryto panel właściwości.");
@@ -286,6 +311,7 @@ public class MainLayout extends Div {
         workspaceWires.clear();
         workspaceWires.putAll(workspaceMockService.createInitialWires());
         netAliases.clear();
+        backendProjectId = null;
         dragState = null;
         suppressNextCanvasClick = false;
         selectedWireId = null;
@@ -309,8 +335,98 @@ public class MainLayout extends Div {
                 .orElse(null);
         refreshWorkspaceState();
         initializeWorkspaceHistory();
+        updateBackendControls();
         updateSimulationIndicators();
         statusMessageValue.setText("Nowy projekt mockowany został przygotowany.");
+    }
+
+    private void openBackendAuthDialog() {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Połączenie z backendem");
+
+        TextField usernameField = new TextField("Login");
+        usernameField.setWidthFull();
+        usernameField.setClearButtonVisible(true);
+
+        TextField emailField = new TextField("E-mail");
+        emailField.setWidthFull();
+        emailField.setPlaceholder("Wymagane tylko przy rejestracji");
+        emailField.setClearButtonVisible(true);
+
+        PasswordField passwordField = new PasswordField("Hasło");
+        passwordField.setWidthFull();
+        passwordField.setClearButtonVisible(true);
+
+        Span hint = new Span("Zaloguj istniejące konto albo załóż nowe. Projekty i symulacje backendowe wymagają JWT.");
+        hint.getStyle().set("color", "#516174");
+        hint.getStyle().set("font-size", "12px");
+
+        Span errorMessage = new Span();
+        errorMessage.getStyle().set("color", "#a23a3a");
+        errorMessage.getStyle().set("font-size", "12px");
+        errorMessage.getStyle().set("white-space", "pre-wrap");
+
+        Div body = new Div();
+        body.getStyle().set("display", "grid");
+        body.getStyle().set("gap", "12px");
+        body.getStyle().set("min-width", "320px");
+        body.add(hint, usernameField, emailField, passwordField, errorMessage);
+
+        Button cancelButton = new Button("Anuluj", event -> dialog.close());
+        Button registerButton = new Button("Załóż konto", event -> {
+            try {
+                UserDto user = backendClient.registerAndLogin(
+                        usernameField.getValue(),
+                        emailField.getValue(),
+                        passwordField.getValue());
+                backendProjectId = null;
+                updateBackendControls();
+                dialog.close();
+                statusMessageValue.setText("Założono konto i połączono z backendem jako " + user.username() + ".");
+            } catch (IllegalStateException exception) {
+                updateBackendControls();
+                errorMessage.setText(exception.getMessage());
+            }
+        });
+        Button loginButton = new Button("Zaloguj", event -> {
+            try {
+                UserDto user = backendClient.login(usernameField.getValue(), passwordField.getValue());
+                backendProjectId = null;
+                updateBackendControls();
+                dialog.close();
+                statusMessageValue.setText("Połączono z backendem jako " + user.username() + ".");
+            } catch (IllegalStateException exception) {
+                updateBackendControls();
+                errorMessage.setText(exception.getMessage());
+            }
+        });
+
+        dialog.add(body);
+        dialog.getFooter().add(cancelButton, registerButton, loginButton);
+        dialog.open();
+        usernameField.focus();
+    }
+
+    private void logoutFromBackend() {
+        backendClient.logout();
+        backendProjectId = null;
+        updateBackendControls();
+        statusMessageValue.setText("Rozłączono sesję backendową.");
+    }
+
+    private void updateBackendControls() {
+        UserDto currentUser = backendClient.currentUser();
+        boolean authenticated = currentUser != null;
+        backendSessionReadout.setText(authenticated
+                ? "Backend: " + currentUser.username()
+                : "Backend: offline");
+        String projectLabel = authenticated
+                ? backendProjectId == null ? "Projekt DB: nowy" : "Projekt DB: #" + backendProjectId
+                : "Projekt DB: -";
+        backendProjectReadout.setText(projectLabel);
+        statusBackendValue.setText(projectLabel);
+        setClass(backendAuthButton, "is-disabled", authenticated);
+        setClass(backendLogoutButton, "is-disabled", !authenticated);
     }
 
     private void handleCanvasClick(double canvasX, double canvasY) {
@@ -473,10 +589,15 @@ public class MainLayout extends Div {
 
         WorkspaceMockService.WorkspaceElement movedElement =
                 workspaceMockService.moveElement(dragState.originalElement(), deltaX, deltaY);
+        WorkspaceMockService.WorkspaceElement currentElement = workspaceElements.get(elementId);
+        if (currentElement != null
+                && Math.abs(currentElement.left() - movedElement.left()) < 0.01
+                && Math.abs(currentElement.top() - movedElement.top()) < 0.01) {
+            return;
+        }
         workspaceElements.put(elementId, movedElement);
         dragState = new DragState(elementId, dragState.originalElement(), dragState.startCanvasX(), dragState.startCanvasY(), true);
-        refreshWorkspaceState();
-        statusMessageValue.setText("Przeciąganie elementu " + elementId + " po siatce arkusza.");
+        renderWorkspaceDuringDrag();
     }
 
     private void handleElementDragEnd(String elementId, double canvasX, double canvasY) {
@@ -495,6 +616,7 @@ public class MainLayout extends Div {
         schematicPreview.setDraggingElement(null);
 
         if (positionChanged) {
+            refreshWorkspaceState();
             recordWorkspaceChange();
             suppressNextCanvasClick = true;
             statusMessageValue.setText("Przesunięto " + elementId + " przeciągnięciem.");
@@ -731,10 +853,16 @@ public class MainLayout extends Div {
     }
 
     private void saveCurrentProject() {
-        savedProjectSnapshot = captureProjectSnapshot();
-        updateProjectControls();
-        statusMessageValue.setText("Zapisano projekt mockowany: "
-                + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
+        try {
+            CircuitSchematic storedSchematic = persistProjectToBackend();
+            savedProjectSnapshot = captureProjectSnapshot();
+            updateProjectControls();
+            statusMessageValue.setText("Zapisano projekt w backendzie jako #" + storedSchematic.id()
+                    + ": " + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
+        } catch (IllegalArgumentException | IllegalStateException exception) {
+            updateBackendControls();
+            statusMessageValue.setText(exception.getMessage());
+        }
     }
 
     private void loadSavedProject() {
@@ -815,6 +943,21 @@ public class MainLayout extends Div {
         schematicPreview.setFocusedPin(resolveFocusedPin());
     }
 
+    private void renderWorkspaceDuringDrag() {
+        WorkspaceMockService.NetTopology dragNetTopology =
+                workspaceMockService.resolveNetTopology(workspaceElements, workspaceWires.values(), netAliases);
+        schematicPreview.renderWorkspace(
+                workspaceElements.values(),
+                workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode),
+                dragNetTopology.nets());
+        schematicPreview.setSelectedElement(selectedElementId);
+        schematicPreview.setDraggingElement(dragState == null ? null : dragState.elementId());
+        schematicPreview.setSelectedWire(selectedWireId);
+        schematicPreview.setSelectedNet(selectedNetKey);
+        schematicPreview.setPendingWireStart(pendingWireStart);
+        schematicPreview.setFocusedPin(resolveFocusedPin());
+    }
+
     private void refreshSelectionPanels() {
         if (selectedWireId != null) {
             WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
@@ -857,7 +1000,7 @@ public class MainLayout extends Div {
             if (latestSimulation != null && simulationReady) {
                 showMeasuredResults(element, details);
             } else if (!simulationReady && latestSimulationMessage != null && latestSimulationNetlist != null) {
-                propertiesWindow.update(details, false);
+                propertiesWindow.update(element, details, false);
                 resultsWindow.showSimulation(
                         "Aktywny element: " + details.id() + " / " + details.typeLabel(),
                         analysisLabel,
@@ -867,7 +1010,7 @@ public class MainLayout extends Div {
                         latestSimulationNetlist,
                         List.of(latestSimulationMessage));
             } else {
-                propertiesWindow.update(details, simulationReady);
+                propertiesWindow.update(element, details, simulationReady);
                 resultsWindow.update(details, analysisLabel, simulationReady);
             }
             schematicPreview.setSelectedElement(selectedElementId);
@@ -879,6 +1022,7 @@ public class MainLayout extends Div {
             WorkspaceMockService.ElementDetails details) {
         MeasuredResults measuredResults = buildMeasuredResults(element);
         propertiesWindow.showMeasuredElement(
+                element,
                 details,
                 measuredResults.primaryTraceName(),
                 measuredResults.peak(),
@@ -1255,26 +1399,22 @@ public class MainLayout extends Div {
         }
 
         try {
-            var resolvedWires = workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode);
-            CircuitSchematic schematic = workspaceExportService.exportSchematic(
-                    PROJECT_FILE_NAME,
-                    workspaceElements,
-                    resolvedWires,
-                    workspaceNetTopology);
-            CircuitSchematic storedSchematic = backendClient.saveSchematic(schematic);
+            CircuitSchematic storedSchematic = persistProjectToBackend();
             SimulationRequest request = new SimulationRequest(
                     storedSchematic.id(),
                     resolveAnalysisType(),
                     resolveAnalysisParameters());
             latestSimulationNetlist = workspaceExportService.buildEngineNetlist(storedSchematic, request);
-            latestSimulation = simulationCsvService.parse(backendClient.runSimulationCsv(request));
+            BackendClient.SimulationExecution simulationExecution =
+                    backendClient.runSimulation(storedSchematic.id(), latestSimulationNetlist);
+            latestSimulation = simulationCsvService.parse(simulationExecution.csv());
             simulationReady = true;
             latestSimulationMessage = null;
             resultsWindow.setVisible(true);
             resultsWindow.setActiveTab(ResultsWindow.ResultTab.SUMMARY);
             refreshSelectionPanels();
             updateSimulationIndicators();
-            statusMessageValue.setText("Symulacja zakończona dla: " + analysisLabel + ".");
+            statusMessageValue.setText("Symulacja backendowa zakończona dla: " + analysisLabel + ".");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             latestSimulation = null;
             simulationReady = false;
@@ -1282,9 +1422,23 @@ public class MainLayout extends Div {
             resultsWindow.setVisible(true);
             resultsWindow.setActiveTab(ResultsWindow.ResultTab.LOGS);
             refreshSelectionPanels();
+            updateBackendControls();
             updateSimulationIndicators();
             statusMessageValue.setText(exception.getMessage());
         }
+    }
+
+    private CircuitSchematic persistProjectToBackend() {
+        var resolvedWires = workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode);
+        CircuitSchematic schematic = workspaceExportService.exportSchematic(
+                PROJECT_FILE_NAME,
+                workspaceElements,
+                resolvedWires,
+                workspaceNetTopology);
+        CircuitSchematic storedSchematic = backendClient.saveProject(backendProjectId, schematic);
+        backendProjectId = storedSchematic.id();
+        updateBackendControls();
+        return storedSchematic;
     }
 
     private void toggleResultsWindow(boolean visible) {
@@ -1748,6 +1902,208 @@ public class MainLayout extends Div {
         statusMessageValue.setText("Przywrócono domyślne ustawienia źródła dla " + selectedElementId + ".");
     }
 
+    private void applySelectedElementProperties() {
+        if (selectedElementId == null || selectedWireId != null) {
+            statusMessageValue.setText("Najpierw zaznacz element na arkuszu.");
+            return;
+        }
+
+        WorkspaceMockService.WorkspaceElement element = workspaceElements.get(selectedElementId);
+        if (element == null) {
+            statusMessageValue.setText("Nie znaleziono zaznaczonego elementu.");
+            return;
+        }
+
+        PropertiesWindow.ElementFormData form = propertiesWindow.readElementForm();
+        String nextId;
+        double nextLeft;
+        double nextTop;
+        String nextValue = form.value() == null ? "" : form.value().trim();
+        WorkspaceMockService.Orientation nextOrientation =
+                form.orientation() == null ? element.orientation() : form.orientation();
+        String nextSourceType = element.sourceType();
+        Double nextFrequency = element.frequency();
+
+        try {
+            nextId = validateEditedElementId(element, form.id());
+            nextLeft = parseElementCoordinate(form.left(), "X");
+            nextTop = parseElementCoordinate(form.top(), "Y");
+            validateEditedElementValue(element, nextValue);
+            if (element.isSource()) {
+                nextSourceType = form.sourceType();
+                if (nextSourceType == null || nextSourceType.isBlank()) {
+                    nextSourceType = workspaceMockService.defaultSourceType(element.type());
+                }
+                nextSourceType = WorkspaceMockService.normalizeSourceType(nextSourceType);
+                nextFrequency = WorkspaceMockService.SOURCE_TYPE_SINE.equals(nextSourceType)
+                        ? parsePositiveDecimal(form.frequency(), "Częstotliwość")
+                        : null;
+            }
+        } catch (IllegalArgumentException exception) {
+            statusMessageValue.setText(exception.getMessage());
+            return;
+        }
+
+        boolean idChanged = !nextId.equals(element.id());
+        boolean positionChanged = !sameCanvasCoordinate(nextLeft, element.left())
+                || !sameCanvasCoordinate(nextTop, element.top());
+
+        WorkspaceMockService.WorkspaceElement updated = workspaceMockService.updateElementValue(element, nextValue);
+        if (nextOrientation != updated.orientation()) {
+            updated = workspaceMockService.updateElementOrientation(updated, nextOrientation);
+        }
+        if (positionChanged) {
+            updated = workspaceMockService.moveElementTo(updated, nextLeft, nextTop);
+        }
+        if (element.isSource()) {
+            updated = workspaceMockService.updateSourceFrequency(
+                    workspaceMockService.updateSourceType(updated, nextSourceType),
+                    nextFrequency);
+        }
+
+        WorkspaceMockService.WorkspaceElement finalElement = idChanged
+                ? new WorkspaceMockService.WorkspaceElement(
+                        nextId,
+                        updated.type(),
+                        updated.left(),
+                        updated.top(),
+                        updated.orientation(),
+                        updated.value(),
+                        updated.sourceType(),
+                        updated.frequency())
+                : updated;
+        if (!idChanged && finalElement.equals(element)) {
+            statusMessageValue.setText("Nie wprowadzono zmian w polach elementu.");
+            return;
+        }
+
+        replaceElementPreservingOrder(element.id(), finalElement);
+        if (idChanged) {
+            remapWireElementReferences(element.id(), nextId);
+            selectedElementId = nextId;
+        }
+
+        refreshWorkspaceState();
+        recordWorkspaceChange();
+        statusMessageValue.setText("Zaktualizowano właściwości elementu "
+                + (idChanged ? element.id() + " -> " + nextId : nextId) + ".");
+    }
+
+    private String validateEditedElementId(
+            WorkspaceMockService.WorkspaceElement element,
+            String rawId) {
+        String candidate = rawId == null ? "" : rawId.trim();
+        if (candidate.isBlank()) {
+            throw new IllegalArgumentException("ID elementu nie może być puste.");
+        }
+        if (candidate.length() > 32) {
+            throw new IllegalArgumentException("ID elementu jest zbyt długie. Użyj maksymalnie 32 znaków.");
+        }
+        if (!candidate.matches("[A-Za-z][A-Za-z0-9_]*")) {
+            throw new IllegalArgumentException("ID elementu może zawierać litery, cyfry i podkreślenia; musi zaczynać się od litery.");
+        }
+        if (element.type() == WorkspaceMockService.ElementType.GROUND
+                && !candidate.toUpperCase(Locale.ROOT).startsWith("GND")) {
+            throw new IllegalArgumentException("Element masy musi mieć ID zaczynające się od GND.");
+        }
+
+        boolean duplicate = workspaceElements.values().stream()
+                .anyMatch(existing -> !existing.id().equals(element.id()) && existing.id().equalsIgnoreCase(candidate));
+        if (duplicate) {
+            throw new IllegalArgumentException("Takie ID elementu jest już używane na arkuszu.");
+        }
+        return candidate;
+    }
+
+    private void validateEditedElementValue(
+            WorkspaceMockService.WorkspaceElement element,
+            String value) {
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("Wpisz wartość elementu.");
+        }
+        if (value.length() > 48) {
+            throw new IllegalArgumentException("Wartość elementu jest zbyt długa. Skróć opis parametru.");
+        }
+        if (element.isSource()) {
+            parseFiniteDecimal(value, "Amplituda źródła");
+        }
+    }
+
+    private double parseElementCoordinate(String rawValue, String axisLabel) {
+        return parseFiniteDecimal(rawValue, "Pozycja " + axisLabel);
+    }
+
+    private double parseFiniteDecimal(String rawValue, String label) {
+        String candidate = rawValue == null ? "" : rawValue.trim().replace(',', '.');
+        if (candidate.isBlank()) {
+            throw new IllegalArgumentException(label + " nie może być pusta.");
+        }
+
+        double parsed;
+        try {
+            parsed = Double.parseDouble(candidate);
+        } catch (NumberFormatException exception) {
+            throw new IllegalArgumentException(label + " musi być liczbą.");
+        }
+
+        if (!Double.isFinite(parsed)) {
+            throw new IllegalArgumentException(label + " musi być liczbą skończoną.");
+        }
+        return parsed;
+    }
+
+    private double parsePositiveDecimal(String rawValue, String label) {
+        double parsed = parseFiniteDecimal(rawValue, label);
+        if (parsed <= 0) {
+            throw new IllegalArgumentException(label + " musi być większa od zera.");
+        }
+        return parsed;
+    }
+
+    private void replaceElementPreservingOrder(
+            String currentId,
+            WorkspaceMockService.WorkspaceElement replacement) {
+        LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> reordered = new LinkedHashMap<>();
+        for (Map.Entry<String, WorkspaceMockService.WorkspaceElement> entry : workspaceElements.entrySet()) {
+            if (entry.getKey().equals(currentId)) {
+                reordered.put(replacement.id(), replacement);
+            } else {
+                reordered.put(entry.getKey(), entry.getValue());
+            }
+        }
+        workspaceElements.clear();
+        workspaceElements.putAll(reordered);
+    }
+
+    private void remapWireElementReferences(String currentId, String nextId) {
+        LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> remappedWires = new LinkedHashMap<>();
+        for (Map.Entry<String, WorkspaceMockService.WorkspaceWire> entry : workspaceWires.entrySet()) {
+            WorkspaceMockService.WorkspaceWire wire = entry.getValue();
+            WorkspaceMockService.PinRef start = remapPinRef(wire.start(), currentId, nextId);
+            WorkspaceMockService.PinRef end = remapPinRef(wire.end(), currentId, nextId);
+            remappedWires.put(entry.getKey(), new WorkspaceMockService.WorkspaceWire(wire.id(), start, end));
+        }
+        workspaceWires.clear();
+        workspaceWires.putAll(remappedWires);
+        if (pendingWireStart != null) {
+            pendingWireStart = remapPinRef(pendingWireStart, currentId, nextId);
+        }
+    }
+
+    private WorkspaceMockService.PinRef remapPinRef(
+            WorkspaceMockService.PinRef pinRef,
+            String currentId,
+            String nextId) {
+        if (pinRef == null || !currentId.equals(pinRef.elementId())) {
+            return pinRef;
+        }
+        return new WorkspaceMockService.PinRef(nextId, pinRef.pinKey());
+    }
+
+    private boolean sameCanvasCoordinate(double left, double right) {
+        return Math.abs(left - right) < 0.01;
+    }
+
     private void startWireEndpointEdit(WorkspaceMockService.WireEndpoint endpoint) {
         if (selectedWireId == null) {
             statusMessageValue.setText("Najpierw zaznacz przewód na arkuszu.");
@@ -2064,6 +2420,7 @@ public class MainLayout extends Div {
         meta.addClassName("menubar-meta");
         meta.add(new Span("Projekt: " + PROJECT_FILE_NAME));
         meta.add(new Span("Arkusz 1 / 1"));
+        meta.add(backendSessionReadout, backendProjectReadout, backendAuthButton, backendLogoutButton);
         menuBar.add(meta);
         return menuBar;
     }
@@ -2146,7 +2503,8 @@ public class MainLayout extends Div {
         Span newProject = createAction("Nowy", "tool-button");
         newProject.addClickListener(event -> resetWorkspace());
 
-        Span saveProject = createAction("Zapisz", "tool-button", "is-disabled");
+        Span saveProject = createAction("Zapisz", "tool-button");
+        saveProject.addClickListener(event -> saveCurrentProject());
         Span exportProject = createAction("Eksport", "tool-button", "is-disabled");
 
         Span simulate = createAction("Symuluj", "tool-button", "is-primary");
@@ -2314,6 +2672,7 @@ public class MainLayout extends Div {
                 createStatusSegment("Narzędzie", statusToolValue),
                 createStatusSegment("Analiza", statusAnalysisValue),
                 createStatusSegment("Symulacja", statusSimulationValue),
+                createStatusSegment("Backend", statusBackendValue),
                 createStretchStatusSegment("Komunikat", statusMessageValue),
                 createStatusSegment("Zoom", statusZoomValue));
         return statusBar;

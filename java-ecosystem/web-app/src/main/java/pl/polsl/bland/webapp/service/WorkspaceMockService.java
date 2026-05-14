@@ -346,13 +346,17 @@ public class WorkspaceMockService {
     }
 
     public WorkspaceElement moveElement(WorkspaceElement element, double deltaX, double deltaY) {
-        double left = clamp(snap(element.left() + deltaX), GRID_LEFT, GRID_RIGHT - element.type().orientedWidth(element.orientation()));
-        double top = clamp(snap(element.top() + deltaY), GRID_TOP, GRID_BOTTOM - element.type().orientedHeight(element.orientation()));
+        return moveElementTo(element, element.left() + deltaX, element.top() + deltaY);
+    }
+
+    public WorkspaceElement moveElementTo(WorkspaceElement element, double left, double top) {
+        double resolvedLeft = clamp(snap(left), GRID_LEFT, GRID_RIGHT - element.type().orientedWidth(element.orientation()));
+        double resolvedTop = clamp(snap(top), GRID_TOP, GRID_BOTTOM - element.type().orientedHeight(element.orientation()));
         return new WorkspaceElement(
                 element.id(),
                 element.type(),
-                left,
-                top,
+                resolvedLeft,
+                resolvedTop,
                 element.orientation(),
                 element.value(),
                 element.sourceType(),
@@ -360,7 +364,11 @@ public class WorkspaceMockService {
     }
 
     public WorkspaceElement rotateElement(WorkspaceElement element) {
-        Orientation nextOrientation = element.orientation().next();
+        return updateElementOrientation(element, element.orientation().next());
+    }
+
+    public WorkspaceElement updateElementOrientation(WorkspaceElement element, Orientation orientation) {
+        Orientation nextOrientation = orientation == null ? element.orientation() : orientation;
         double currentWidth = element.type().orientedWidth(element.orientation());
         double currentHeight = element.type().orientedHeight(element.orientation());
         double nextWidth = element.type().orientedWidth(nextOrientation);
