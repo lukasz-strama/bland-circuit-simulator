@@ -28,7 +28,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 public class MainView extends BorderPane {
 
     private final WorkspaceService workspace = new WorkspaceService();
-    private final ApiService apiService = new ApiService();
+    private final ApiService apiService = ApiService.get();
     private final Map<String, WorkspaceService.WorkspaceElement> elements = new LinkedHashMap<>();
     private final Map<String, WorkspaceService.WorkspaceWire> wires = new LinkedHashMap<>();
     
@@ -70,20 +70,6 @@ public class MainView extends BorderPane {
     private final Label statusZoom = new Label("100%");
 
     public MainView() {
-
-        try {
-        apiService.login("admin3", "admin");
-    } catch (Exception e) {
-        e.printStackTrace();
-
-        Alert a = new Alert(
-                Alert.AlertType.ERROR,
-                "Nie udało się zalogować:\n" + e.getMessage(),
-                ButtonType.OK
-        );
-
-        a.showAndWait();
-    }
 
         setTop(new VBox(createMenuBar(), createToolBar(), createComponentBar()));
         setLeft(createToolRail());

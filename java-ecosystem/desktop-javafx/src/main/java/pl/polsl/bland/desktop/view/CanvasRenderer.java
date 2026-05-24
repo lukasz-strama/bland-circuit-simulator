@@ -116,8 +116,8 @@ public class CanvasRenderer {
     gc.strokeOval(x - 10, y + 15, 20, 20);
 
     gc.strokeLine(x, y + 18, x, y + 32); 
-    gc.strokeLine(x, y + 32, x - 3, y + 28);  
-    gc.strokeLine(x, y + 32, x + 3, y + 28);   
+    gc.strokeLine(x, y + 18, x - 3, y + 22);  
+    gc.strokeLine(x, y + 18, x + 3, y + 22);   
 }
 
 
@@ -127,8 +127,8 @@ private void drawCurrent(GraphicsContext gc, double x, double y) {
     gc.strokeOval(x - 10, y + 15, 20, 20);
     gc.strokeOval(x - 7, y + 18, 14, 14);
     gc.strokeLine(x, y + 19, x, y + 31);
-    gc.strokeLine(x, y + 31, x - 3, y + 27);
-    gc.strokeLine(x, y + 31, x + 3, y + 27);
+    gc.strokeLine(x, y + 19, x - 3, y + 23);
+    gc.strokeLine(x, y + 19, x + 3, y + 23);
 
 }
 
