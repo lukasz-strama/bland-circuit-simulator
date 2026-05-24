@@ -174,21 +174,19 @@ public CircuitSchematic exportToSchematic(
         Map<String, WorkspaceElement> elements,
         Map<String, WorkspaceWire> wires
 ) {
-
-    
+    // 1. Zbieramy wszystkie piny (łącznie z REF dla GND)
     Map<String, NodeRef> allPins = new LinkedHashMap<>();
     for (var el : elements.values()) {
-
         if (el.type() == ElementType.GROUND) {
             allPins.put(el.id() + ".REF", new NodeRef(el.id(), "REF"));
-            continue;
-        }
-
-        for (var p : el.pins()) {
-            allPins.put(el.id() + "." + p.key(), new NodeRef(el.id(), p.key()));
+        } else {
+            for (var p : el.pins()) {
+                allPins.put(el.id() + "." + p.key(), new NodeRef(el.id(), p.key()));
+            }
         }
     }
 
+    // 2. Union-Find po pinach
     UnionFind uf = new UnionFind(allPins.size());
     List<String> pinKeys = new ArrayList<>(allPins.keySet());
     Map<String, Integer> pinIndex = new HashMap<>();
@@ -196,118 +194,108 @@ public CircuitSchematic exportToSchematic(
         pinIndex.put(pinKeys.get(i), i);
     }
 
-    
-
     for (var w : wires.values()) {
         String a = w.elementA() + "." + w.pinA();
         String b = w.elementB() + "." + w.pinB();
-        
 
-if (elements.get(w.elementA()).type() == ElementType.GROUND) {
-    a = w.elementA() + ".REF";
-}
-if (elements.get(w.elementB()).type() == ElementType.GROUND) {
-    b = w.elementB() + ".REF";
-}
+        if (elements.get(w.elementA()).type() == ElementType.GROUND) {
+            a = w.elementA() + ".REF";
+        }
+        if (elements.get(w.elementB()).type() == ElementType.GROUND) {
+            b = w.elementB() + ".REF";
+        }
 
         uf.union(pinIndex.get(a), pinIndex.get(b));
-}
-    
+    }
 
+    // 3. Grupowanie pinów w nety
     Map<Integer, List<String>> groupPins = new HashMap<>();
-for (String pin : pinKeys) {
-    int root = uf.find(pinIndex.get(pin));
-    groupPins.computeIfAbsent(root, k -> new ArrayList<>()).add(pin);
-}
-
-Map<Integer, String> groupName = new HashMap<>();
-Map<String, String> pinToNode = new HashMap<>();
-
-int counter = 1;
-for (var entry : groupPins.entrySet()) {
-    int root = entry.getKey();
-    List<String> pinsInGroup = entry.getValue();
-
-    boolean isGroundGroup = pinsInGroup.stream().anyMatch(pin -> {
-        String[] parts = pin.split("\\.");
-        String elId = parts[0];
-        String pinKey = parts[1];
-        WorkspaceElement el = elements.get(elId);
-        return el != null && el.type() == ElementType.GROUND && "REF".equals(pinKey);
-    });
-
-    String nodeName;
-    if (isGroundGroup) {
-        nodeName = "0";
-    } else {
-        nodeName = "N" + counter++;
+    for (String pin : pinKeys) {
+        int root = uf.find(pinIndex.get(pin));
+        groupPins.computeIfAbsent(root, k -> new ArrayList<>()).add(pin);
     }
 
-    groupName.put(root, nodeName);
-    for (String pin : pinsInGroup) {
-        pinToNode.put(pin, nodeName);
-    }
-}
+    Map<String, String> pinToNode = new HashMap<>();
+    int counter = 1;
+    for (var entry : groupPins.entrySet()) {
+        List<String> pinsInGroup = entry.getValue();
 
-   
+        boolean isGroundGroup = pinsInGroup.stream().anyMatch(pin -> {
+            String[] parts = pin.split("\\.");
+            String elId = parts[0];
+            String pinKey = parts[1];
+            WorkspaceElement el = elements.get(elId);
+            return el != null && el.type() == ElementType.GROUND && "REF".equals(pinKey);
+        });
+
+        String nodeName = isGroundGroup ? "0" : "N" + counter++;
+        for (String pin : pinsInGroup) {
+            pinToNode.put(pin, nodeName);
+        }
+    }
+
+    // 4. Elementy
     List<CircuitElement> ce = new ArrayList<>();
-for (var el : elements.values()) {
-    boolean isGnd = el.type() == ElementType.GROUND;
-    String finalId = isGnd ? "GND_" + el.id() : el.id();
+    for (var el : elements.values()) {
+        boolean isGnd = el.type() == ElementType.GROUND;
 
-    String node1, node2;
+        if (isGnd) {
+            // GND jako osobny typ, node1=node2=0, value=0
+            ce.add(new CircuitElement(
+                    el.id(),
+                    CircuitElement.ElementType.GND,
+                    "0",
+                    "0",
+                    0.0,
+                    null, null,
+                    (int) el.x(), (int) el.y(), (int) el.rotation()
+            ));
+            continue;
+        }
 
-    if (isGnd) {
-        // Masa: node1 = węzeł do którego jest podłączona (może być "0" jeśli izolowana)
-        // node2 = zawsze "0" – masa jest punktem referencyjnym
-        String ref = pinToNode.get(el.id() + ".REF");
-        node1 = (ref != null) ? ref : "0";
-        node2 = "0";
-    } else {
         List<Pin> pins = el.pins();
-        node1 = pinToNode.get(el.id() + "." + pins.get(0).key());
-        node2 = (pins.size() >= 2)
+        String node1 = pinToNode.get(el.id() + "." + pins.get(0).key());
+        String node2 = (pins.size() >= 2)
                 ? pinToNode.get(el.id() + "." + pins.get(1).key())
                 : "0";
+
+        if (node1 == null) node1 = "NC_" + el.id() + "_1";
+        if (node2 == null) node2 = "NC_" + el.id() + "_2";
+
+        ce.add(new CircuitElement(
+                el.id(),
+                mapType(el.type()),
+                node1,
+                node2,
+                Double.parseDouble(el.value()),
+                null, null,
+                (int) el.x(), (int) el.y(), (int) el.rotation()
+        ));
     }
 
-    // Zabezpieczenie – null oznacza pin niepodłączony
-    if (node1 == null) node1 = "NC_" + finalId + "_1";
-    if (node2 == null) node2 = "NC_" + finalId + "_2";
-
-    ce.add(new CircuitElement(
-            finalId,
-            isGnd ? CircuitElement.ElementType.R : mapType(el.type()),
-            node1,
-            node2,
-            isGnd ? 0.0 : Double.parseDouble(el.value()),
-            null, null,
-            (int) el.x(), (int) el.y(), (int) el.rotation()
-    ));
-}
+    // 5. Wires – po pinach, nie po środkach elementów
     List<Wire> ww = new ArrayList<>();
     for (var w : wires.values()) {
-    String keyA = w.elementA() + "." + w.pinA();
-    String keyB = w.elementB() + "." + w.pinB();
+        WorkspaceElement elA = elements.get(w.elementA());
+        WorkspaceElement elB = elements.get(w.elementB());
+        if (elA == null || elB == null) continue;
 
-    // znajdź dokładne współrzędne pinów
-    Pin pinA = findPin(elements.get(w.elementA()), w.pinA());
-    Pin pinB = findPin(elements.get(w.elementB()), w.pinB());
+        Pin pinA = findPin(elA, w.pinA());
+        Pin pinB = findPin(elB, w.pinB());
+        if (pinA == null || pinB == null) continue;
 
-    if (pinA == null || pinB == null) continue;
+        String keyA = w.elementA() + "." + w.pinA();
+        String keyB = w.elementB() + "." + w.pinB();
+        String node = pinToNode.getOrDefault(keyA, pinToNode.get(keyB));
+        if (node == null) node = "?";
 
-    String node = pinToNode.getOrDefault(keyA, pinToNode.get(keyB));
-    if (node == null) node = "?";
+        List<int[]> pts = List.of(
+                new int[]{(int) pinA.x(), (int) pinA.y()},
+                new int[]{(int) pinB.x(), (int) pinB.y()}
+        );
 
-    List<int[]> pts = List.of(
-        new int[]{(int) pinA.x(), (int) pinA.y()},
-        new int[]{(int) pinB.x(), (int) pinB.y()}
-    );
-
-    ww.add(new Wire(w.id(), node, pts));
-}
-
-
+        ww.add(new Wire(w.id(), node, pts));
+    }
 
     return new CircuitSchematic(
             1L,
@@ -319,6 +307,7 @@ for (var el : elements.values()) {
     );
 }
 
+
 public void importFromSchematic(
         CircuitSchematic sc,
         Map<String, WorkspaceElement> elements,
@@ -328,15 +317,16 @@ public void importFromSchematic(
     wires.clear();
 
     for (var el : sc.elements()) {
-    boolean isGnd = el.id().startsWith("GND_");
+            boolean isGnd = el.type() == CircuitElement.ElementType.GND;
+            elements.put(el.id(), new WorkspaceElement(
+                    el.id(),
+                    // POPRAWKA: mapTypeReverse przyjmuje ElementType, nie CircuitElement
+                    isGnd ? ElementType.GROUND : mapTypeReverse(el.type()),
+                    el.x(), el.y(),
+                    isGnd ? "" : String.valueOf(el.value()),
+                    el.rotation()
+            ));
 
-    elements.put(el.id(), new WorkspaceElement(
-        el.id(),
-        isGnd ? ElementType.GROUND : mapTypeReverse(el),
-        el.x(), el.y(),
-        isGnd ? "" : String.valueOf(el.value()), 
-        el.rotation()
-    ));
 }
 
 
@@ -380,6 +370,12 @@ private Pin findPin(WorkspaceElement el, String pinKey) {
              .orElse(null);
 }
 
+private String resolveGndPin(Map<String, WorkspaceElement> elements, String elementId, String pinKey) {
+        WorkspaceElement el = elements.get(elementId);
+        if (el != null && el.type() == ElementType.GROUND) return elementId + ".REF";
+        return elementId + "." + pinKey;
+    }
+
 private record PinHit(String elementId, String pinKey, double dist) {}
 
 private PinHit findNearestPin(Map<String, WorkspaceElement> elements, double x, double y) {
@@ -410,17 +406,18 @@ private CircuitElement.ElementType mapType(ElementType t) {
         case INDUCTOR -> CircuitElement.ElementType.L;
         case VOLTAGE -> CircuitElement.ElementType.V;
         case CURRENT -> CircuitElement.ElementType.I;
-        case GROUND -> CircuitElement.ElementType.R;
+        case GROUND -> CircuitElement.ElementType.GND;
     };
 }
 
-private WorkspaceService.ElementType mapTypeReverse(CircuitElement el) {
-    return switch (el.type()) {
+private WorkspaceService.ElementType mapTypeReverse(CircuitElement.ElementType el) {
+    return switch (el) {
         case R -> ElementType.RESISTOR;
         case C -> ElementType.CAPACITOR;
         case L -> ElementType.INDUCTOR;
         case V -> ElementType.VOLTAGE;
         case I -> ElementType.CURRENT;
+        case GND -> ElementType.GROUND;
     };
 }
 

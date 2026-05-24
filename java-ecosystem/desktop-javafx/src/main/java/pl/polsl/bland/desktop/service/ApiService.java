@@ -20,8 +20,9 @@ import java.util.Map;
  */
 public class ApiService {
 
-    private static final String BASE_URL =
-            System.getProperty("bland.api.url", "http://localhost:8080/api");
+    private static final String BASE_URL = "http://localhost:8080/api";
+        // "https://bland-circuit-engine.onrender.com/api";
+            // System.getProperty("bland.api.url", "http://localhost:8080/api");
 
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
@@ -40,6 +41,10 @@ public class ApiService {
 }
 
     public Long saveSchematic(String name, CircuitSchematic schematic) throws Exception {
+        if (guestMode) {
+    throw new RuntimeException("Tryb gościa - zapis wraz z odczytem są zablokowane.");
+}
+
     Map<String, Object> payload = new HashMap<>();
     payload.put("name", name);
     payload.put("elements", schematic.elements()); 
@@ -104,6 +109,10 @@ System.out.println("koniec zapisu");
 }
 
     public CircuitSchematic loadSchematic(long id) throws Exception {
+        if (guestMode) {
+    throw new RuntimeException("Tryb gościa - zapis wraz z odczytem są zablokowane.");
+}
+
 
     HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(BASE_URL + "/projects/" + id))
@@ -163,6 +172,42 @@ public void login(String username, String password) throws Exception {
         throw new RuntimeException("Backend nie zwrócił JWT.");
     }
 }
+
+private boolean guestMode = false;
+
+public static ApiService INSTANCE = new ApiService();
+public static ApiService get() { return INSTANCE; }
+
+public void setGuestMode() {
+    this.guestMode = true;
+    this.jwtToken = null;
+}
+
+public boolean isGuest() {
+    return guestMode;
+}
+
+public void register(String username, String email, String password) throws Exception {
+    String body = mapper.writeValueAsString(Map.of(
+            "username", username,
+            "email", email,
+            "password", password
+    ));
+
+    HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(BASE_URL + "/auth/register"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+
+    HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+
+    if (response.statusCode() >= 400) {
+        throw new RuntimeException("Błąd rejestracji: " + response.body());
+    }
+}
+
+
 
 
 

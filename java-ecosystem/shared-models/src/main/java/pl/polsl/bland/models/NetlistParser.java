@@ -31,7 +31,8 @@ public class NetlistParser {
         sb.append("* Schemat: ").append(schematic.name()).append("\n");
 
         for (CircuitElement el : schematic.elements()) {
-            sb.append(buildElementLine(el)).append("\n");
+            String line = buildElementLine(el);
+                if (line != null) sb.append(line).append("\n");
         }
 
         sb.append(buildSimulateDirective(request)).append("\n");
@@ -48,9 +49,9 @@ public class NetlistParser {
 
     private String buildElementLine(CircuitElement element) throws NetlistParseException{
 
-    //     if (element.type() == CircuitElement.ElementType.GROUND) {
-    //     return "RES %s 0 0 val=0".formatted(element.id());
-    // }
+          if (element.type() == CircuitElement.ElementType.GND) {
+            return null;
+        }
 
         String node1 = sanitizeNode(element.node1(), element.id(), "node1");
         String node2 = sanitizeNode(element.node2(), element.id(), "node2");
@@ -61,6 +62,7 @@ public class NetlistParser {
             case C -> passive("CAP", element, node1, node2);
             case V -> source("VSRC", element, node1, node2);
             case I -> source("ISRC", element, node1, node2);
+            case GND -> null;    
         };
     }
 
@@ -134,7 +136,11 @@ public class NetlistParser {
             throw new NetlistParseException("Brak elementów na schemacie");
         }
 
-        boolean hasGround = elements.stream().anyMatch(el -> "0".equals(el.node1()) || "0".equals(el.node2()));
+        boolean hasGround = elements.stream().anyMatch(el ->
+                el.type() == CircuitElement.ElementType.GND
+                || "0".equals(el.node1())
+                || "0".equals(el.node2()));
+ 
 
         if(!hasGround){
             throw new NetlistParseException("Brak masy na schemacie");

@@ -10,7 +10,7 @@ import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import pl.polsl.bland.desktop.editor.DrawableWire;
-import pl.polsl.bland.desktop.service.NetlistBuilder;
+import pl.polsl.bland.models.NetlistParser;
 import pl.polsl.bland.desktop.service.SimulationCsvService;
 import pl.polsl.bland.desktop.service.SimulationService;
 import pl.polsl.bland.desktop.service.WorkspaceService;
@@ -28,9 +28,10 @@ import com.fasterxml.jackson.core.type.TypeReference;
 public class MainView extends BorderPane {
 
     private final WorkspaceService workspace = new WorkspaceService();
-    private final ApiService apiService = new ApiService();
+    private final ApiService apiService = ApiService.get();
     private final Map<String, WorkspaceService.WorkspaceElement> elements = new LinkedHashMap<>();
     private final Map<String, WorkspaceService.WorkspaceWire> wires = new LinkedHashMap<>();
+    
 
     private final List<WorkspaceSnapshot> history = new ArrayList<>();
     private int historyIndex = -1;
@@ -59,6 +60,7 @@ public class MainView extends BorderPane {
     private final Map<QuickComponent, Button> componentButtons = new LinkedHashMap<>();
     private final TextField componentSearch = new TextField();
     private QuickComponent activeComponent = null;
+    private NetlistParser netlistParser = new NetlistParser();
 
     public boolean draggingElement = false;
     public boolean dragHappened = false;
@@ -387,7 +389,7 @@ routingCombo.valueProperty().addListener((obs, o, n) -> {
 
     try {
         CircuitSchematic schematic = buildCurrentSchematic();
-        String netlist = NetlistBuilder.build(schematic, request);
+        String netlist = netlistParser.parse(schematic, request);
 
         SimulationCsvService.ParsedSimulation sim =
                 new SimulationService().simulate(schematic, request);

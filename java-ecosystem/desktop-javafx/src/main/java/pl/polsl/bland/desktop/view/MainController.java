@@ -1,11 +1,10 @@
 package pl.polsl.bland.desktop.view;
 
-import pl.polsl.bland.desktop.service.NetlistBuilder;
 import pl.polsl.bland.desktop.service.SimulationCsvService;
 import pl.polsl.bland.desktop.service.SimulationService;
 import pl.polsl.bland.models.CircuitSchematic;
 import pl.polsl.bland.models.SimulationRequest;
-import pl.polsl.bland.desktop.service.NetlistBuilder;
+import pl.polsl.bland.models.NetlistParser;
 
 import java.util.Map;
 
@@ -13,6 +12,7 @@ public class MainController {
 
     private final SimulationService simulationService = new SimulationService();
     private final MainView view;
+    private final NetlistParser netlistParser = new NetlistParser();
 
     public MainController(MainView view) {
         this.view = view;
@@ -28,7 +28,7 @@ public class MainController {
                 Map.of("tstop", 0.008, "tstep", 0.0001)
         );
 
-        String netlist = NetlistBuilder.build(schematic, request);
+        String netlist = netlistParser.parse(schematic, request);
 
         SimulationCsvService.ParsedSimulation result =
                 simulationService.simulate(schematic, request);
