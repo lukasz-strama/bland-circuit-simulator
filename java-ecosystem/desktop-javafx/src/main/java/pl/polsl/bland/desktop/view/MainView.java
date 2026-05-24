@@ -9,15 +9,29 @@ import javafx.scene.control.*;
 import javafx.scene.input.MouseButton;
 import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
+import pl.polsl.bland.desktop.editor.DrawableWire;
+import pl.polsl.bland.models.NetlistParser;
+import pl.polsl.bland.desktop.service.SimulationCsvService;
+import pl.polsl.bland.desktop.service.SimulationService;
 import pl.polsl.bland.desktop.service.WorkspaceService;
+import pl.polsl.bland.models.CircuitSchematic;
+import pl.polsl.bland.models.SimulationRequest;
+import pl.polsl.bland.desktop.service.ApiService;
 
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.util.*;
+
+import com.fasterxml.jackson.core.type.TypeReference;
 
 public class MainView extends BorderPane {
 
     private final WorkspaceService workspace = new WorkspaceService();
+    private final ApiService apiService = new ApiService();
     private final Map<String, WorkspaceService.WorkspaceElement> elements = new LinkedHashMap<>();
     private final Map<String, WorkspaceService.WorkspaceWire> wires = new LinkedHashMap<>();
+    
 
     private final List<WorkspaceSnapshot> history = new ArrayList<>();
     private int historyIndex = -1;
@@ -29,9 +43,14 @@ public class MainView extends BorderPane {
     private final CanvasRenderer renderer;
     private final EditorController controller;
     private final PropertiesPanel propertiesPanel;
+    private MainController mainController;
+    private final ResultsPanel resultsPanel = new ResultsPanel();
+    private final ComboBox<WireRoutingMode> routingCombo = new ComboBox<>();
+
 
     private double lastMouseX = 0;
     private double lastMouseY = 0;
+
     private double zoom = 1.0;
     private final Label lblZoom = new Label("100%");
 
@@ -41,6 +60,7 @@ public class MainView extends BorderPane {
     private final Map<QuickComponent, Button> componentButtons = new LinkedHashMap<>();
     private final TextField componentSearch = new TextField();
     private QuickComponent activeComponent = null;
+    private NetlistParser netlistParser = new NetlistParser();
 
     public boolean draggingElement = false;
     public boolean dragHappened = false;
@@ -51,23 +71,48 @@ public class MainView extends BorderPane {
 
     public MainView() {
 
+        try {
+        apiService.login("admin3", "admin");
+    } catch (Exception e) {
+        e.printStackTrace();
+
+        Alert a = new Alert(
+                Alert.AlertType.ERROR,
+                "Nie udało się zalogować:\n" + e.getMessage(),
+                ButtonType.OK
+        );
+
+        a.showAndWait();
+    }
+
         setTop(new VBox(createMenuBar(), createToolBar(), createComponentBar()));
         setLeft(createToolRail());
         ScrollPane sp = buildCanvasPane();
         setCenter(sp);
 
         propertiesPanel = new PropertiesPanel(elements, this::refreshAndRecord, workspace);
-        setRight(propertiesPanel);
+        SplitPane rightPane = new SplitPane();
+        rightPane.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        rightPane.getItems().addAll(propertiesPanel, resultsPanel);
+        rightPane.setDividerPositions(0.65);
+        setRight(rightPane);
         setBottom(createStatusBar());
 
-        renderer = new CanvasRenderer(workspace);
-        controller = new EditorController(
-                workspace, elements, wires,
-                canvas,
-                this::refreshAndRecord,
-                el -> propertiesPanel.showElement(el),
-                this
-        );
+renderer = new CanvasRenderer(workspace);
+controller = new EditorController(
+        workspace, elements, wires,
+        canvas,
+        this::refreshAndRecord,
+        el -> propertiesPanel.showElement(el),
+        this
+);
+
+routingCombo.valueProperty().addListener((obs, o, n) -> {
+    if (n != null) renderer.setRoutingMode(n);
+    refresh();
+});
+
+
 
         canvas.addEventHandler(MouseEvent.MOUSE_CLICKED, e -> {
             if (e.getButton() == MouseButton.PRIMARY) {
@@ -173,10 +218,19 @@ public class MainView extends BorderPane {
     private MenuBar createMenuBar() {
         MenuItem miNew = new MenuItem("Nowy projekt");
         MenuItem miExit = new MenuItem("Zakończ");
+        MenuItem miSave = new MenuItem("Zapisz");
+        MenuItem miOpen = new MenuItem("Otwórz");
+        miSave.setOnAction(e -> saveSchematic());
+        miOpen.setOnAction(e -> openSchematic());
         miNew.setOnAction(e -> resetWorkspace());
         miExit.setOnAction(e -> System.exit(0));
 
-        Menu menuFile = new Menu("Plik", null, miNew, new SeparatorMenuItem(), miExit);
+        Menu menuFile = new Menu("Plik", null, miNew,
+                new SeparatorMenuItem(),
+                miSave,
+                miOpen,
+                new SeparatorMenuItem(),
+                miExit);
 
         MenuItem miUndo = new MenuItem("Cofnij\tCtrl+Z");
         MenuItem miRedo = new MenuItem("Ponów\tCtrl+Y");
@@ -210,15 +264,23 @@ public class MainView extends BorderPane {
 
     private ToolBar createToolBar() {
         Button btnNew = new Button("Nowy");
+        Button btnOpn = new Button("Otwórz");
         Button btnSave = new Button("Zapisz");
+        Button btnSim = new Button("Symuluj");
         Button btnUndo = new Button("↩ Cofnij");
         Button btnRedo = new Button("↪ Ponów");
         btnUndo.setTooltip(new Tooltip("Cofnij (Ctrl+Z)"));
         btnRedo.setTooltip(new Tooltip("Ponów (Ctrl+Y)"));
+        btnSim.setTooltip(new Tooltip("Symuluj (F5)"));
+        btnSave.setTooltip(new Tooltip("Zapisz schemat w bazie danych"));
+        btnOpn.setTooltip(new Tooltip("Otwórz schemat z bazy danych"));
 
         btnNew.setOnAction(e -> resetWorkspace());
         btnUndo.setOnAction(e -> undo());
         btnRedo.setOnAction(e -> redo());
+        btnSim.setOnAction(e -> simulate());
+        btnSave.setOnAction(e -> saveSchematic());
+        btnOpn.setOnAction(e -> openSchematic()); 
 
         Button btnZoomOut = new Button("−");
         Button btnZoomIn = new Button("+");
@@ -230,12 +292,11 @@ public class MainView extends BorderPane {
         lblZoom.setMinWidth(48);
         lblZoom.setAlignment(Pos.CENTER);
 
-        ComboBox<WireRoutingMode> routingCombo = new ComboBox<>();
         routingCombo.getItems().addAll(WireRoutingMode.values());
         routingCombo.setValue(WireRoutingMode.STRAIGHT);
 
         return new ToolBar(
-                btnNew, btnSave,
+                btnNew, btnSave,btnOpn, btnSim,
                 new Separator(),
                 btnUndo, btnRedo,
                 new Separator(),
@@ -284,10 +345,11 @@ public class MainView extends BorderPane {
             btn.setOnAction(e -> setActiveTool(tool));
             toolButtons.put(tool, btn);
             rail.getChildren().add(btn);
-        }
-        toolButtons.get(WorkspaceTool.SELECT).setTooltip(new Tooltip("Zaznacz (S)"));
-        toolButtons.get(WorkspaceTool.WIRE).setTooltip(new Tooltip("Rysuj przewody (W)"));
-        toolButtons.get(WorkspaceTool.DELETE).setTooltip(new Tooltip("Usuń (X)"));
+}
+            toolButtons.get(WorkspaceTool.SELECT).setTooltip(new Tooltip("Zaznacz (S)"));
+            toolButtons.get(WorkspaceTool.WIRE).setTooltip(new Tooltip("Rysuj przewody (W)"));
+            toolButtons.get(WorkspaceTool.DELETE).setTooltip(new Tooltip("Usuń (X)"));
+            
 
         return rail;
     }
@@ -317,6 +379,93 @@ public class MainView extends BorderPane {
         refresh();
     }
 
+    
+    private void simulate() {
+    SimulationSettingDialog dialog = new SimulationSettingDialog();
+    Optional<SimulationRequest> result = dialog.showAndWait();
+    if (result.isEmpty()) return;
+
+    SimulationRequest request = result.get();
+
+    try {
+        CircuitSchematic schematic = buildCurrentSchematic();
+        String netlist = netlistParser.parse(schematic, request);
+
+        SimulationCsvService.ParsedSimulation sim =
+                new SimulationService().simulate(schematic, request);
+
+        showResults(sim, netlist);
+
+    } catch (Exception e) {
+        e.printStackTrace();
+        showError("Błąd symulacji: " + e.getMessage());
+    }
+}
+
+ private void saveSchematic() {
+
+    TextInputDialog dialog = new TextInputDialog("Mój schemat");
+    dialog.setHeaderText("Zapis schematu");
+    dialog.setContentText("Nazwa:");
+
+    Optional<String> result = dialog.showAndWait();
+
+    if (result.isEmpty()) return;
+
+    String name = result.get();
+
+    try {
+        CircuitSchematic schematic = buildCurrentSchematic();
+
+        Long id = apiService.saveSchematic(name, schematic);
+
+        statusMessage.setText("Zapisano schemat ID=" + id);
+
+    } catch (Exception ex) {
+        ex.printStackTrace();
+        showError("Nie udało się zapisać:\n" + ex.getMessage());
+    }
+}
+ 
+    private void openSchematic() {
+        
+        pl.polsl.bland.desktop.view.OpenSchematicDialog.show(apiService)
+                .ifPresent(meta -> {
+                    statusMessage.setText("Wczytywanie schematu: " + meta.name() + "…");
+ 
+                    Thread.ofVirtual().start(() -> {
+                        try {
+                            pl.polsl.bland.models.CircuitSchematic schematic =
+                                    apiService.loadSchematic(meta.id());
+ 
+                            javafx.application.Platform.runLater(() -> {
+                                workspace.importFromSchematic(schematic, elements, wires);
+                                recordHistory();
+                                refresh();
+                                statusMessage.setText(
+                                        "Wczytano schemat " + meta.name());
+                            });
+                        } catch (Exception ex) {
+                            javafx.application.Platform.runLater(() -> {
+                                statusMessage.setText("Błąd wczytywania.");
+                                showError("Nie udało się wczytać schematu:\n" + ex.getMessage());
+                            });
+                        }
+                    });
+                });
+    }
+
+
+
+public CircuitSchematic buildCurrentSchematic() {
+    return workspace.exportToSchematic(elements, wires);
+}
+
+private void showError(String msg) {
+    Alert a = new Alert(Alert.AlertType.ERROR, msg, ButtonType.OK);
+    a.setHeaderText("Błąd");
+    a.showAndWait();
+}
     private void refresh() {
         gc.clearRect(0, 0, canvas.getWidth(), canvas.getHeight());
         renderer.render(gc, elements, wires.values(), null, zoom, null, null);
@@ -400,6 +549,12 @@ public class MainView extends BorderPane {
         wires.putAll(snap.wires());
         refresh();
     }
+
+    public void showResults(SimulationCsvService.ParsedSimulation sim, String netlist) {
+    resultsPanel.showSimulation(sim, netlist);
+}
+
+
 
     private record WorkspaceSnapshot(
             Map<String, WorkspaceService.WorkspaceElement> elements,
