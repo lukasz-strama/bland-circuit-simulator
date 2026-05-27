@@ -25,6 +25,21 @@ import java.util.*;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 
+/**
+ * Główny widok aplikacji Bland Circuit Simulator.
+ *
+ * Odpowiada za:
+ * <ul>
+ *     <li>budowę interfejsu użytkownika (menu, paski narzędzi, panel właściwości, panel wyników),</li>
+ *     <li>zarządzanie płótnem i renderowaniem schematu,</li>
+ *     <li>obsługę narzędzi edytora (zaznaczanie, przewody, usuwanie),</li>
+ *     <li>historię zmian (undo/redo),</li>
+ *     <li>obsługę symulacji, zapisu i wczytywania schematów,</li>
+ *     <li>komunikację z WorkspaceService, EditorController i ApiService.</li>
+ * </ul>
+ *
+ * Klasa ta jest centralnym elementem UI - łączy logikę edytora, renderowanie i backend.
+ */
 public class MainView extends BorderPane {
 
     private final WorkspaceService workspace = new WorkspaceService();
@@ -70,20 +85,6 @@ public class MainView extends BorderPane {
     private final Label statusZoom = new Label("100%");
 
     public MainView() {
-
-        try {
-        apiService.login("admin2", "admin");
-    } catch (Exception e) {
-        e.printStackTrace();
-
-        Alert a = new Alert(
-                Alert.AlertType.ERROR,
-                "Nie udało się zalogować:\n" + e.getMessage(),
-                ButtonType.OK
-        );
-
-        a.showAndWait();
-    }
 
         setTop(new VBox(createMenuBar(), createToolBar(), createComponentBar()));
         setLeft(createToolRail());
@@ -370,6 +371,14 @@ routingCombo.valueProperty().addListener((obs, o, n) -> {
         return bar;
     }
 
+    /**
+ * Resetuje edytor do stanu początkowego:
+ * <ul>
+ *     <li>czyści elementy i przewody,</li>
+ *     <li>wstawia elementy startowe,</li>
+ *     <li>czyści historię i dodaje pierwszy snapshot.</li>
+ * </ul>
+ */
     private void resetWorkspace() {
         elements.clear();
         elements.putAll(workspace.createInitialWorkspace());
@@ -379,7 +388,17 @@ routingCombo.valueProperty().addListener((obs, o, n) -> {
         refresh();
     }
 
-    
+    /**
+ * Uruchamia proces symulacji:
+ * <ol>
+ *     <li>otwiera okno ustawień symulacji,</li>
+ *     <li>generuje netlistę,</li>
+ *     <li>wysyła ją do silnika symulacyjnego,</li>
+ *     <li>wyświetla wyniki w panelu wyników.</li>
+ * </ol>
+ *
+ * Obsługuje błędy symulacji i wyświetla komunikaty użytkownikowi.
+ */
     private void simulate() {
     SimulationSettingDialog dialog = new SimulationSettingDialog();
     Optional<SimulationRequest> result = dialog.showAndWait();
@@ -402,6 +421,12 @@ routingCombo.valueProperty().addListener((obs, o, n) -> {
     }
 }
 
+/**
+ * Zapisuje aktualny schemat do bazy danych poprzez ApiService.
+ * Wyświetla okno dialogowe z nazwą schematu.
+ *
+ * Obsługuje błędy połączenia i informuje użytkownika o rezultacie.
+ */
  private void saveSchematic() {
 
     TextInputDialog dialog = new TextInputDialog("Mój schemat");
@@ -427,6 +452,17 @@ routingCombo.valueProperty().addListener((obs, o, n) -> {
     }
 }
  
+    /**
+ * Otwiera okno wyboru schematu z bazy danych.
+ * Po wybraniu schematu:
+ * <ul>
+ *     <li>wczytuje go z backendu,</li>
+ *     <li>importuje do WorkspaceService,</li>
+ *     <li>odświeża widok i historię zmian.</li>
+ * </ul>
+ *
+ * Operacja wykonywana jest asynchronicznie (wątki wirtualne).
+ */
     private void openSchematic() {
         
         pl.polsl.bland.desktop.view.OpenSchematicDialog.show(apiService)
@@ -456,7 +492,17 @@ routingCombo.valueProperty().addListener((obs, o, n) -> {
     }
 
 
-
+/**
+ * Eksportuje aktualny stan edytora (elementy + przewody)
+ * do obiektu {@link CircuitSchematic}, który może zostać:
+ * <ul>
+ *     <li>zapisany w bazie danych,</li>
+ *     <li>wysłany do symulacji,</li>
+ *     <li>wyświetlony w panelu wyników.</li>
+ * </ul>
+ *
+ * @return schemat w formacie domenowym
+ */
 public CircuitSchematic buildCurrentSchematic() {
     return workspace.exportToSchematic(elements, wires);
 }
@@ -483,6 +529,12 @@ private void showError(String msg) {
         refresh();
     }
 
+    /**
+ * Ustawia aktywne narzędzie edytora (zaznaczanie, przewód, usuwanie).
+ * Aktualizuje UI i resetuje tryb wstawiania komponentów.
+ *
+ * @param tool narzędzie do ustawienia
+ */
     private void setActiveTool(WorkspaceTool tool) {
         activeComponent = null;
         controller.setTool(tool);
@@ -492,6 +544,12 @@ private void showError(String msg) {
         statusMessage.setText("Aktywne narzędzie: " + tool.label() + ".");
     }
 
+    /**
+ * Aktywuje tryb wstawiania komponentu z paska szybkiego wyboru.
+ * Kliknięcie na płótnie wstawi nowy element danego typu.
+ *
+ * @param qc komponent do wstawienia
+ */
     private void activateComponentPlacement(QuickComponent qc) {
         activeComponent = qc;
 
@@ -506,6 +564,15 @@ private void showError(String msg) {
                 btn.setVisible(f.isBlank() || qc.matches(f)));
     }
 
+    /**
+ * Obsługuje kliknięcie na płótnie w trybie wstawiania komponentów.
+ * Wstawia nowy element, jeśli:
+ * <ul>
+ *     <li>wybrano komponent,</li>
+ *     <li>nie trwa przeciąganie,</li>
+ *     <li>nie kliknięto istniejącego elementu.</li>
+ * </ul>
+ */
     private void handleCanvasClick(double x, double y) {
         if (activeComponent == null) return;
         if (draggingElement) return;
@@ -530,12 +597,18 @@ private void showError(String msg) {
         historyIndex = history.size() - 1;
     }
 
+    /**
+ * Przywraca poprzedni stan edytora (cofanie).
+ */
     private void undo() {
         if (historyIndex <= 0) return;
         historyIndex--;
         restoreSnapshot(history.get(historyIndex));
     }
 
+    /**
+ * Przywraca następny stan edytora (ponawianie).
+ */
     private void redo() {
         if (historyIndex >= history.size() - 1) return;
         historyIndex++;
@@ -550,17 +623,35 @@ private void showError(String msg) {
         refresh();
     }
 
+    /**
+ * Wyświetla wyniki symulacji w panelu wyników.
+ *
+ * @param sim wynik symulacji sparsowany z CSV
+ * @param netlist netlista użyta do symulacji
+ */
     public void showResults(SimulationCsvService.ParsedSimulation sim, String netlist) {
     resultsPanel.showSimulation(sim, netlist);
 }
 
 
-
+/**
+ * Pojedynczy zapis stanu edytora używany w historii (undo/redo).
+ *
+ * Zawiera:
+ * <ul>
+ *     <li>kopię mapy elementów,</li>
+ *     <li>kopię mapy przewodów.</li>
+ * </ul>
+ */
     private record WorkspaceSnapshot(
             Map<String, WorkspaceService.WorkspaceElement> elements,
             Map<String, WorkspaceService.WorkspaceWire> wires
     ) {}
 
+    /**
+ * Komponenty dostępne w pasku szybkiego wstawiania.
+ * Wersja wewnętrzna używana tylko przez MainView.
+ */
     public enum QuickComponent {
         RESISTOR("R", "Rezystor", WorkspaceService.ElementType.RESISTOR),
         CAPACITOR("C", "Kondensator", WorkspaceService.ElementType.CAPACITOR),
@@ -589,6 +680,9 @@ private void showError(String msg) {
         }
     }
 
+    /**
+ * Tryby rysowania przewodów dostępne w MainView.
+ */
     public enum WireRoutingMode {
         STRAIGHT("Prosta"),
         ORTHOGONAL("Ortogonalna");

@@ -12,14 +12,47 @@ import pl.polsl.bland.models.SimulationRequest;
 import pl.polsl.bland.models.SimulationResult;
 import pl.polsl.bland.desktop.view.MainView;
 
+/**
+ * Główna logika edytora schematów.
+ *
+ * Odpowiada za:
+ * - tworzenie elementów i przewodów,
+ * - obliczanie pozycji pinów (z uwzględnieniem rotacji),
+ * - mapowanie elementów edytora na model domenowy (CircuitSchematic),
+ * - import schematu z backendu do formatu edytora,
+ * - wykrywanie połączeń elektrycznych (Union-Find),
+ * - generowanie nazw węzłów (N1, N2, ... oraz 0 dla masy).
+ *
+ * Klasa ta łączy UI z modelem symulacji.
+ */
 public class WorkspaceService {
 
+    /**
+     * Typy elementów dostępnych w edytorze.
+     */
     public enum ElementType {
         RESISTOR, CAPACITOR, INDUCTOR, VOLTAGE, CURRENT, GROUND
     }
 
+    /**
+     * Reprezentuje pojedynczy pin elementu w przestrzeni roboczej.
+     *
+     * @param key nazwa pinu (np. A, B, POS, NEG, REF)
+     * @param x współrzędna X pinu
+     * @param y współrzędna Y pinu
+     */
     public record Pin(String key, double x, double y) {}
 
+    /**
+     * Reprezentuje element umieszczony na płótnie edytora.
+     *
+     * @param id unikalny identyfikator (np. R1, C3)
+     * @param type typ elementu
+     * @param x pozycja X
+     * @param y pozycja Y
+     * @param value wartość elementu (np. 1000, 1e-6)
+     * @param rotation rotacja w stopniach (0, 90, 180, 270)
+     */
     public record WorkspaceElement(
             String id,
             ElementType type,
@@ -28,6 +61,11 @@ public class WorkspaceService {
             String value,
             double rotation
     ) {
+         /**
+         * Zwraca listę pinów elementu po uwzględnieniu rotacji.
+         *
+         * @return lista pinów w globalnych współrzędnych
+         */
         public List<Pin> pins() {
             double angle = rotation();
             double cx = x();
@@ -61,6 +99,15 @@ public class WorkspaceService {
         }
     }
 
+     /**
+     * Reprezentuje przewód łączący dwa piny elementów.
+     *
+     * @param id identyfikator przewodu
+     * @param elementA pierwszy element
+     * @param pinA pin pierwszego elementu
+     * @param elementB drugi element
+     * @param pinB pin drugiego elementu
+     */
     public record WorkspaceWire(
             String id,
             String elementA,
@@ -71,6 +118,11 @@ public class WorkspaceService {
 
     private final AtomicInteger idCounter = new AtomicInteger(1);
 
+    /**
+     * Tworzy początkowy zestaw elementów (np. R1, C1) widoczny po uruchomieniu aplikacji.
+     *
+     * @return mapa elementów
+     */
     public Map<String, WorkspaceElement> createInitialWorkspace() {
         Map<String, WorkspaceElement> map = new LinkedHashMap<>();
         map.put("R1", new WorkspaceElement("R1", ElementType.RESISTOR, 200, 200, "1000", 0));
@@ -78,15 +130,36 @@ public class WorkspaceService {
         return map;
     }
 
+    /**
+     * Tworzy pustą listę przewodów.
+     *
+     * @return mapa przewodów
+     */
     public Map<String, WorkspaceWire> createInitialWires() {
         return new LinkedHashMap<>();
     }
 
+    /**
+     * Tworzy nowy element o podanym typie i pozycji.
+     *
+     * @param type typ elementu
+     * @param x pozycja X
+     * @param y pozycja Y
+     * @return nowy element
+     */
     public WorkspaceElement createElement(ElementType type, double x, double y) {
         String id = type.name().charAt(0) + String.valueOf(idCounter.getAndIncrement());
         return new WorkspaceElement(id, type, x, y, defaultValue(type), 0);
     }
 
+    /**
+     * Przesuwa element o zadany wektor.
+     *
+     * @param el element
+     * @param dx przesunięcie X
+     * @param dy przesunięcie Y
+     * @return nowy element z przesuniętą pozycją
+     */
     public WorkspaceElement moveElement(WorkspaceElement el, double dx, double dy) {
         return new WorkspaceElement(
                 el.id(),
@@ -98,6 +171,12 @@ public class WorkspaceService {
         );
     }
 
+    /**
+     * Obraca element o 90 stopni zgodnie z ruchem wskazówek zegara.
+     *
+     * @param el element
+     * @return nowy element z obróconą rotacją
+     */
     public WorkspaceElement rotateElement(WorkspaceElement el) {
         return new WorkspaceElement(
                 el.id(),
@@ -169,7 +248,19 @@ private static class UnionFind {
     }
 }
 
-
+/**
+     * Eksportuje aktualny stan edytora do modelu domenowego CircuitSchematic.
+     *
+     * Wykonuje:
+     * - analizę połączeń pinów (Union-Find),
+     * - generowanie nazw węzłów,
+     * - mapowanie elementów edytora na CircuitElement,
+     * - mapowanie przewodów na Wire.
+     *
+     * @param elements mapa elementów edytora
+     * @param wires mapa przewodów
+     * @return obiekt CircuitSchematic gotowy do symulacji lub zapisu
+     */
 public CircuitSchematic exportToSchematic(
         Map<String, WorkspaceElement> elements,
         Map<String, WorkspaceWire> wires
@@ -307,7 +398,13 @@ public CircuitSchematic exportToSchematic(
     );
 }
 
-
+/**
+     * Importuje schemat z backendu do formatu edytora.
+     *
+     * @param sc schemat z backendu
+     * @param elements mapa elementów do uzupełnienia
+     * @param wires mapa przewodów do uzupełnienia
+     */
 public void importFromSchematic(
         CircuitSchematic sc,
         Map<String, WorkspaceElement> elements,
