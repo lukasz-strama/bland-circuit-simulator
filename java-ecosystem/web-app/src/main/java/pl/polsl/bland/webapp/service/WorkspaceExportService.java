@@ -103,7 +103,7 @@ public class WorkspaceExportService {
                 null,
                 toGrid(element.left()),
                 toGrid(element.top()),
-                0);
+                element.orientation().degrees());
     }
 
     private CircuitElement createSource(
@@ -126,7 +126,7 @@ public class WorkspaceExportService {
                 frequency,
                 toGrid(element.left()),
                 toGrid(element.top()),
-                0);
+                element.orientation().degrees());
     }
 
     private Wire exportWire(WorkspaceMockService.ResolvedWire wire, WorkspaceMockService.NetTopology topology) {

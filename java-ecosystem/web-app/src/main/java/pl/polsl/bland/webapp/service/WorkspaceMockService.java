@@ -308,6 +308,41 @@ public class WorkspaceMockService {
         return new FreePoint(x, y);
     }
 
+    public WorkspaceElement createGroundAtRefPoint(Collection<WorkspaceElement> existingElements, double refX, double refY) {
+        int nextSequence = nextSequence(existingElements, ElementType.GROUND);
+        String nextId = buildElementId(ElementType.GROUND, nextSequence);
+        ElementType type = ElementType.GROUND;
+        Orientation orientation = Orientation.DEG_0;
+        double left = clamp(snap(refX - 46), GRID_LEFT, GRID_RIGHT - type.orientedWidth(orientation));
+        double top = clamp(snap(refY - 6), GRID_TOP, GRID_BOTTOM - type.orientedHeight(orientation));
+        return new WorkspaceElement(
+                nextId,
+                type,
+                left,
+                top,
+                orientation,
+                defaultValue(type),
+                null,
+                null);
+    }
+
+    public Optional<PinRef> resolvePinAt(Map<String, WorkspaceElement> elements, double canvasX, double canvasY) {
+        for (WorkspaceElement element : elements.values()) {
+            for (PinPosition pin : pinsForElement(element)) {
+                if (sameCoordinate(pin.x(), canvasX) && sameCoordinate(pin.y(), canvasY)) {
+                    return Optional.of(new PinRef(pin.elementId(), pin.pinKey()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    public WireEndpointRef resolveEndpointAt(Map<String, WorkspaceElement> elements, double canvasX, double canvasY) {
+        return resolvePinAt(elements, canvasX, canvasY)
+                .<WireEndpointRef>map(pinRef -> pinRef)
+                .orElseGet(() -> createFreePoint(canvasX, canvasY));
+    }
+
     public Optional<WorkspaceWire> createWire(
             Map<String, WorkspaceElement> elements,
             Collection<WorkspaceWire> existingWires,

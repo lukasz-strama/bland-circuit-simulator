@@ -21,6 +21,7 @@ import pl.polsl.bland.webapp.service.BackendClient;
 import pl.polsl.bland.webapp.service.SimulationCsvService;
 import pl.polsl.bland.webapp.service.WorkspaceMockService;
 import pl.polsl.bland.webapp.service.WorkspaceExportService;
+import pl.polsl.bland.webapp.service.WorkspaceSchematicMapper;
 import pl.polsl.bland.webapp.view.panel.PropertiesWindow;
 import pl.polsl.bland.webapp.view.panel.ResultsWindow;
 
@@ -55,6 +56,7 @@ public class MainLayout extends Div {
     private final WorkspaceMockService workspaceMockService;
     private final BackendClient backendClient;
     private final WorkspaceExportService workspaceExportService;
+    private final WorkspaceSchematicMapper workspaceSchematicMapper;
     private final SimulationCsvService simulationCsvService;
     private final PropertiesWindow propertiesWindow;
     private final ResultsWindow resultsWindow;
@@ -113,7 +115,6 @@ public class MainLayout extends Div {
     private WorkspaceMockService.WireEndpoint pendingWireEndpoint;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private int historyIndex = -1;
-    private ProjectSnapshot savedProjectSnapshot;
     private SimulationCsvService.ParsedSimulation latestSimulation;
     private String latestSimulationNetlist;
     private String latestSimulationMessage;
@@ -131,10 +132,12 @@ public class MainLayout extends Div {
             WorkspaceMockService workspaceMockService,
             BackendClient backendClient,
             WorkspaceExportService workspaceExportService,
+            WorkspaceSchematicMapper workspaceSchematicMapper,
             SimulationCsvService simulationCsvService) {
         this.workspaceMockService = workspaceMockService;
         this.backendClient = backendClient;
         this.workspaceExportService = workspaceExportService;
+        this.workspaceSchematicMapper = workspaceSchematicMapper;
         this.simulationCsvService = simulationCsvService;
         initializeTransientParameters();
         this.propertiesWindow = new PropertiesWindow();
@@ -467,6 +470,7 @@ public class MainLayout extends Div {
         statusBackendValue.setText(projectLabel);
         setClass(backendAuthButton, "is-disabled", authenticated);
         setClass(backendLogoutButton, "is-disabled", !authenticated);
+        updateProjectControls();
     }
 
     private void handleCanvasClick(double canvasX, double canvasY) {
@@ -921,7 +925,6 @@ public class MainLayout extends Div {
     private void saveCurrentProject() {
         try {
             CircuitSchematic storedSchematic = persistProjectToBackend();
-            savedProjectSnapshot = captureProjectSnapshot();
             updateProjectControls();
             statusMessageValue.setText("Zapisano projekt w backendzie jako #" + storedSchematic.id()
                     + ": " + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
@@ -932,68 +935,110 @@ public class MainLayout extends Div {
     }
 
     private void loadSavedProject() {
-        if (savedProjectSnapshot == null) {
-            statusMessageValue.setText("Brak zapisanego projektu do wczytania.");
+        if (!backendClient.isAuthenticated()) {
+            statusMessageValue.setText("Zaloguj się do backendu, zanim wczytasz projekt.");
             updateProjectControls();
             return;
         }
 
-        restoreProjectSnapshot(savedProjectSnapshot);
-        initializeWorkspaceHistory();
-        updateProjectControls();
-        statusMessageValue.setText("Wczytano ostatnio zapisany projekt mockowany.");
+        try {
+            List<CircuitSchematic> projects = backendClient.listProjects();
+            if (projects.isEmpty()) {
+                statusMessageValue.setText("Backend nie ma jeszcze zapisanych projektów dla tego użytkownika.");
+                updateProjectControls();
+                return;
+            }
+            openProjectLoadDialog(projects);
+        } catch (IllegalStateException exception) {
+            updateBackendControls();
+            statusMessageValue.setText(exception.getMessage());
+        }
     }
 
-    private ProjectSnapshot captureProjectSnapshot() {
-        return new ProjectSnapshot(
-                new LinkedHashMap<>(workspaceElements),
-                new LinkedHashMap<>(workspaceWires),
-                new LinkedHashMap<>(netAliases),
-                analysisLabel,
-                wireRoutingMode,
-                transientTstop,
-                transientTstep,
-                activeComponent,
-                selectedElementId,
-                selectedWireId,
-                selectedNetKey,
-                simulationReady,
-                simulationSettingsWindow.isVisible(),
-                resultsWindow.isVisible(),
-                propertiesWindow.isVisible(),
-                zoom);
+    private void openProjectLoadDialog(List<CircuitSchematic> projects) {
+        Dialog dialog = new Dialog();
+        dialog.setHeaderTitle("Wczytaj projekt z backendu");
+
+        Select<CircuitSchematic> projectSelect = new Select<>();
+        projectSelect.setLabel("Projekt");
+        projectSelect.setWidthFull();
+        projectSelect.setItems(projects);
+        projectSelect.setItemLabelGenerator(this::formatProjectOption);
+        projectSelect.setValue(projects.get(0));
+
+        Span errorMessage = new Span();
+        errorMessage.getStyle().set("color", "#a23a3a");
+        errorMessage.getStyle().set("font-size", "12px");
+        errorMessage.getStyle().set("white-space", "pre-wrap");
+
+        Div body = new Div();
+        body.getStyle().set("display", "grid");
+        body.getStyle().set("gap", "12px");
+        body.getStyle().set("min-width", "360px");
+        body.add(projectSelect, errorMessage);
+
+        Button cancelButton = new Button("Anuluj", event -> dialog.close());
+        Button loadButton = new Button("Wczytaj", event -> {
+            CircuitSchematic selectedProject = projectSelect.getValue();
+            if (selectedProject == null || selectedProject.id() == null) {
+                errorMessage.setText("Wybierz projekt do wczytania.");
+                return;
+            }
+            try {
+                loadProjectFromBackend(selectedProject.id());
+                dialog.close();
+            } catch (IllegalArgumentException | IllegalStateException exception) {
+                updateBackendControls();
+                errorMessage.setText(exception.getMessage());
+            }
+        });
+
+        dialog.add(body);
+        dialog.getFooter().add(cancelButton, loadButton);
+        dialog.open();
     }
 
-    private void restoreProjectSnapshot(ProjectSnapshot snapshot) {
+    private String formatProjectOption(CircuitSchematic project) {
+        String name = project.name() == null || project.name().isBlank() ? "Bez nazwy" : project.name();
+        String id = project.id() == null ? "nowy" : "#" + project.id();
+        return id + " - " + name;
+    }
+
+    private void loadProjectFromBackend(Long projectId) {
+        CircuitSchematic storedSchematic = backendClient.loadProject(projectId);
+        WorkspaceSchematicMapper.WorkspaceState importedState =
+                workspaceSchematicMapper.importSchematic(storedSchematic);
+
         workspaceElements.clear();
-        workspaceElements.putAll(snapshot.elements());
+        workspaceElements.putAll(importedState.elements());
         workspaceWires.clear();
-        workspaceWires.putAll(snapshot.wires());
+        workspaceWires.putAll(importedState.wires());
         netAliases.clear();
-        netAliases.putAll(snapshot.netAliases());
-        selectedElementId = snapshot.selectedElementId();
-        selectedWireId = snapshot.selectedWireId();
-        selectedNetKey = snapshot.selectedNetKey();
+        netAliases.putAll(importedState.netAliases());
+        backendProjectId = storedSchematic.id();
+        selectedElementId = workspaceMockService.firstElement(workspaceElements)
+                .map(WorkspaceMockService.WorkspaceElement::id)
+                .orElse(null);
+        selectedWireId = null;
+        selectedNetKey = null;
         dragState = null;
         suppressNextCanvasClick = false;
         pendingWireStart = null;
         pendingWireEndpoint = null;
         clearSimulationState();
-        setAnalysis(snapshot.analysisLabel(), true, true);
-        setWireRoutingMode(snapshot.wireRoutingMode(), true, true);
-        setTransientParameters(snapshot.transientTstop(), snapshot.transientTstep());
-        setActiveComponent(snapshot.activeComponent(), true);
+        resultsWindow.setVisible(false);
+        propertiesWindow.setVisible(true);
         setActiveTool(WorkspaceTool.SELECT, true);
-        setZoom(snapshot.zoom(), true);
-        propertiesWindow.setVisible(snapshot.propertiesVisible());
-        resultsWindow.setVisible(snapshot.resultsVisible());
-        simulationSettingsWindow.setVisible(snapshot.simulationSettingsVisible());
         refreshWorkspaceState();
+        initializeWorkspaceHistory();
+        updateBackendControls();
         updateSimulationIndicators();
+        statusMessageValue.setText("Wczytano projekt #" + storedSchematic.id()
+                + ": " + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
     }
 
     private void updateProjectControls() {
-        setClass(loadProjectButton, "is-disabled", savedProjectSnapshot == null);
+        setClass(loadProjectButton, "is-disabled", !backendClient.isAuthenticated());
     }
 
     private void renderWorkspace() {
@@ -2572,6 +2617,7 @@ public class MainLayout extends Div {
 
         Span saveProject = createAction("Zapisz", "tool-button");
         saveProject.addClickListener(event -> saveCurrentProject());
+        loadProjectButton.addClickListener(event -> loadSavedProject());
         Span exportProject = createAction("Eksport", "tool-button", "is-disabled");
 
         Span simulate = createAction("Symuluj", "tool-button", "is-primary");
@@ -2652,6 +2698,7 @@ public class MainLayout extends Div {
         toolbar.add(buildToolbarGroup(
                 newProject,
                 saveProject,
+                loadProjectButton,
                 exportProject,
                 simulate,
                 showResults));
@@ -3070,25 +3117,6 @@ public class MainLayout extends Div {
             boolean simulationSettingsVisible,
             boolean resultsVisible,
             boolean propertiesVisible) {
-    }
-
-    private record ProjectSnapshot(
-            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
-            LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires,
-            LinkedHashMap<String, String> netAliases,
-            String analysisLabel,
-            WorkspaceMockService.WireRoutingMode wireRoutingMode,
-            double transientTstop,
-            double transientTstep,
-            QuickComponent activeComponent,
-            String selectedElementId,
-            String selectedWireId,
-            String selectedNetKey,
-            boolean simulationReady,
-            boolean simulationSettingsVisible,
-            boolean resultsVisible,
-            boolean propertiesVisible,
-            double zoom) {
     }
 
     private enum WorkspaceTool {
