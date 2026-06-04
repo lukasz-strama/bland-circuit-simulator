@@ -3,6 +3,7 @@ package pl.polsl.bland.webapp.view;
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.Svg;
 import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.DetachEvent;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Div;
@@ -11,7 +12,6 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
-import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import pl.polsl.bland.models.CircuitSchematic;
@@ -92,7 +92,6 @@ public class MainLayout extends Div {
     private final Select<String> analysisSelect = new Select<>();
     private final Select<String> sourceTypeSelect = new Select<>();
     private final Select<WorkspaceMockService.WireRoutingMode> wireRoutingSelect = new Select<>();
-    private final TextField componentSearch = new TextField();
     private final TextField analysisTstopField = new TextField();
     private final TextField analysisTstepField = new TextField();
     private final TextField elementValueField = new TextField();
@@ -110,7 +109,7 @@ public class MainLayout extends Div {
     private String selectedWireId;
     private String selectedNetKey;
     private Long backendProjectId;
-    private WorkspaceMockService.PinRef pendingWireStart;
+    private WorkspaceMockService.WireEndpointRef pendingWireStart;
     private WorkspaceMockService.WireEndpoint pendingWireEndpoint;
     private WorkspaceMockService.NetTopology workspaceNetTopology = WorkspaceMockService.NetTopology.empty();
     private int historyIndex = -1;
@@ -184,7 +183,6 @@ public class MainLayout extends Div {
 
         configureAnalysisSelect();
         configureTransientParameterFields();
-        configureComponentSearch();
         configureElementValueField();
         configureSourceTypeSelect();
         configureSourceFrequencyField();
@@ -192,6 +190,7 @@ public class MainLayout extends Div {
         configureWireRoutingSelect();
         configureBackendControls();
         configureHistoryButtons();
+        configureKeyboardShortcuts();
         configureFloatingWindows();
         configureSimulationSettingsWindow();
 
@@ -206,6 +205,13 @@ public class MainLayout extends Div {
     protected void onAttach(AttachEvent attachEvent) {
         super.onAttach(attachEvent);
         attachEvent.getUI().getLoadingIndicatorConfiguration().setApplyDefaultTheme(false);
+        installKeyboardShortcuts();
+    }
+
+    @Override
+    protected void onDetach(DetachEvent detachEvent) {
+        uninstallKeyboardShortcuts();
+        super.onDetach(detachEvent);
     }
 
     private void configureAnalysisSelect() {
@@ -231,14 +237,6 @@ public class MainLayout extends Div {
         analysisTstepField.setPlaceholder("tstep [s]");
         analysisTstepField.addClassName("analysis-parameter-field");
         analysisTstepField.setClearButtonVisible(false);
-    }
-
-    private void configureComponentSearch() {
-        componentSearch.setPlaceholder("Szukaj w bibliotece: rezystor, dioda, źródło prądu...");
-        componentSearch.addClassName("component-search");
-        componentSearch.setClearButtonVisible(true);
-        componentSearch.setValueChangeMode(ValueChangeMode.EAGER);
-        componentSearch.addValueChangeListener(event -> applyComponentFilter(event.getValue()));
     }
 
     private void configureElementValueField() {
@@ -289,6 +287,50 @@ public class MainLayout extends Div {
         updateHistoryControls();
     }
 
+    private void configureKeyboardShortcuts() {
+        getElement().addEventListener("bland-rotate-shortcut", event -> rotateSelectedElement());
+    }
+
+    private void installKeyboardShortcuts() {
+        getElement().executeJs("""
+                const host = this;
+                if (host.__blandKeydownCleanup) {
+                  host.__blandKeydownCleanup();
+                }
+                const isEditableTarget = (target) => {
+                  if (!target || target === document) {
+                    return false;
+                  }
+                  return !!target.closest(
+                    'input, textarea, [contenteditable="true"], vaadin-text-field, vaadin-password-field, vaadin-text-area, vaadin-select, vaadin-combo-box'
+                  );
+                };
+                const handler = (event) => {
+                  if (event.altKey || event.ctrlKey || event.metaKey) {
+                    return;
+                  }
+                  if (isEditableTarget(event.target) || isEditableTarget(document.activeElement)) {
+                    return;
+                  }
+                  if (event.key && event.key.toLowerCase() === 'r') {
+                    event.preventDefault();
+                    host.dispatchEvent(new CustomEvent('bland-rotate-shortcut'));
+                  }
+                };
+                document.addEventListener('keydown', handler);
+                host.__blandKeydownCleanup = () => document.removeEventListener('keydown', handler);
+                """);
+    }
+
+    private void uninstallKeyboardShortcuts() {
+        getElement().executeJs("""
+                if (this.__blandKeydownCleanup) {
+                  this.__blandKeydownCleanup();
+                  this.__blandKeydownCleanup = null;
+                }
+                """);
+    }
+
     private void configureFloatingWindows() {
         propertiesWindow.setApplyChangesHandler(this::applySelectedElementProperties);
         propertiesWindow.setCloseHandler(() -> {
@@ -322,13 +364,11 @@ public class MainLayout extends Div {
         resultsWindow.setVisible(false);
         propertiesWindow.setVisible(true);
         simulationSettingsWindow.setVisible(false);
-        componentSearch.clear();
         resetTransientParameters(true);
         setAnalysis(ANALYSIS_TRANSIENT, true, true);
         setActiveTool(WorkspaceTool.SELECT, true);
         setActiveComponent(QuickComponent.RESISTOR, true);
         setWireRoutingMode(WorkspaceMockService.WireRoutingMode.STRAIGHT, true, true);
-        applyComponentFilter("");
         setZoom(DEFAULT_ZOOM, true);
         selectedElementId = workspaceMockService.firstElement(workspaceElements)
                 .map(WorkspaceMockService.WorkspaceElement::id)
@@ -435,6 +475,13 @@ public class MainLayout extends Div {
             return;
         }
 
+        if (pendingWireEndpoint != null
+                && selectedWireId != null
+                && (activeTool == WorkspaceTool.SELECT || activeTool == WorkspaceTool.WIRE)) {
+            reconnectSelectedWire(workspaceMockService.createFreePoint(canvasX, canvasY));
+            return;
+        }
+
         if (activeTool.isPlacementTool()) {
             addElementAt(activeTool.elementType(), canvasX, canvasY);
             return;
@@ -443,13 +490,14 @@ public class MainLayout extends Div {
         switch (activeTool) {
             case WIRE -> {
                 if (pendingWireStart != null) {
-                    clearPendingWire();
-                    statusMessageValue.setText("Anulowano rozpoczęte rysowanie przewodu.");
+                    finishWireAt(workspaceMockService.createFreePoint(canvasX, canvasY));
                 } else if (pendingWireEndpoint != null) {
-                    clearPendingWireEndpoint();
-                    statusMessageValue.setText("Anulowano przepinanie końcówki przewodu.");
+                    reconnectSelectedWire(workspaceMockService.createFreePoint(canvasX, canvasY));
                 } else {
-                    statusMessageValue.setText("Kliknij pierwszy pin, aby rozpocząć przewód.");
+                    pendingWireStart = workspaceMockService.createFreePoint(canvasX, canvasY);
+                    schematicPreview.setPendingWireStart(pendingWireStart);
+                    statusMessageValue.setText("Początek przewodu ustawiono w " + formatEndpoint(pendingWireStart)
+                            + ". Kliknij pin albo drugi punkt siatki.");
                 }
             }
             case PROBE -> statusMessageValue.setText("Kliknij element, aby aktywować sondę i podejrzeć przebieg.");
@@ -682,7 +730,25 @@ public class MainLayout extends Div {
             return;
         }
 
-        workspaceMockService.createWire(workspaceElements, workspaceWires.values(), pendingWireStart, clickedPin)
+        finishWireAt(clickedPin);
+    }
+
+    private void finishWireAt(WorkspaceMockService.WireEndpointRef end) {
+        if (pendingWireStart == null) {
+            pendingWireStart = end;
+            schematicPreview.setPendingWireStart(pendingWireStart);
+            statusMessageValue.setText("Początek przewodu ustawiono w " + formatEndpoint(end) + ". Kliknij drugi punkt.");
+            return;
+        }
+
+        if (pendingWireStart.equals(end)) {
+            String endpointLabel = formatEndpoint(end);
+            clearPendingWire();
+            statusMessageValue.setText("Anulowano rozpoczęty przewód z " + endpointLabel + ".");
+            return;
+        }
+
+        workspaceMockService.createWire(workspaceElements, workspaceWires.values(), pendingWireStart, end)
                 .ifPresentOrElse(wire -> {
                     workspaceWires.put(wire.id(), wire);
                     clearPendingWire();
@@ -690,10 +756,10 @@ public class MainLayout extends Div {
                     recordWorkspaceChange();
                     statusMessageValue.setText(
                             "Dodano przewód " + wire.id() + " między "
-                                    + wire.start().elementId() + ":" + wire.start().pinKey()
+                                    + formatEndpoint(wire.start())
                                     + " oraz "
-                                    + wire.end().elementId() + ":" + wire.end().pinKey() + ".");
-                }, () -> statusMessageValue.setText("Taki przewód już istnieje albo wskazane piny są nieprawidłowe."));
+                                    + formatEndpoint(wire.end()) + ".");
+                }, () -> statusMessageValue.setText("Taki przewód już istnieje albo wskazane punkty są nieprawidłowe."));
     }
 
     private void handleWireClick(String wireId) {
@@ -940,7 +1006,7 @@ public class MainLayout extends Div {
         schematicPreview.setSelectedWire(selectedWireId);
         schematicPreview.setSelectedNet(selectedNetKey);
         schematicPreview.setPendingWireStart(pendingWireStart);
-        schematicPreview.setFocusedPin(resolveFocusedPin());
+        schematicPreview.setFocusedEndpoint(resolveFocusedEndpoint());
     }
 
     private void renderWorkspaceDuringDrag() {
@@ -955,7 +1021,7 @@ public class MainLayout extends Div {
         schematicPreview.setSelectedWire(selectedWireId);
         schematicPreview.setSelectedNet(selectedNetKey);
         schematicPreview.setPendingWireStart(pendingWireStart);
-        schematicPreview.setFocusedPin(resolveFocusedPin());
+        schematicPreview.setFocusedEndpoint(resolveFocusedEndpoint());
     }
 
     private void refreshSelectionPanels() {
@@ -1228,8 +1294,10 @@ public class MainLayout extends Div {
         return workspaceNetTopology.netName(pinRef, pinRef.elementId() + "_" + pinRef.pinKey());
     }
 
-    private boolean isGroundPin(WorkspaceMockService.PinRef pinRef) {
-        return "REF".equals(pinRef.pinKey()) && pinRef.elementId().startsWith("GND");
+    private boolean isGroundPin(WorkspaceMockService.WireEndpointRef endpoint) {
+        return endpoint instanceof WorkspaceMockService.PinRef pinRef
+                && "REF".equals(pinRef.pinKey())
+                && pinRef.elementId().startsWith("GND");
     }
 
     private double[] resolveVoltageSeries(String nodeName) {
@@ -1356,7 +1424,7 @@ public class MainLayout extends Div {
         syncElementControls();
     }
 
-    private void reconnectSelectedWire(WorkspaceMockService.PinRef replacementPin) {
+    private void reconnectSelectedWire(WorkspaceMockService.WireEndpointRef replacementEndpoint) {
         WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(selectedWireId);
         if (wire == null || pendingWireEndpoint == null) {
             clearPendingWireEndpoint();
@@ -1364,13 +1432,12 @@ public class MainLayout extends Div {
             return;
         }
 
-        WorkspaceMockService.PinRef currentPin = pendingWireEndpoint == WorkspaceMockService.WireEndpoint.START
+        WorkspaceMockService.WireEndpointRef currentEndpoint = pendingWireEndpoint == WorkspaceMockService.WireEndpoint.START
                 ? wire.start()
                 : wire.end();
-        if (currentPin.equals(replacementPin)) {
+        if (currentEndpoint.equals(replacementEndpoint)) {
             clearPendingWireEndpoint();
-            statusMessageValue.setText("Ta końcówka przewodu już jest podłączona do " + replacementPin.elementId()
-                    + ":" + replacementPin.pinKey() + ".");
+            statusMessageValue.setText("Ta końcówka przewodu już jest podłączona do " + formatEndpoint(replacementEndpoint) + ".");
             return;
         }
 
@@ -1379,7 +1446,7 @@ public class MainLayout extends Div {
                         workspaceWires.values(),
                         wire,
                         pendingWireEndpoint,
-                        replacementPin)
+                        replacementEndpoint)
                 .ifPresentOrElse(updatedWire -> {
                     String endpointLabel = pendingWireEndpoint.label().toLowerCase(Locale.ROOT);
                     workspaceWires.put(updatedWire.id(), updatedWire);
@@ -1387,9 +1454,9 @@ public class MainLayout extends Div {
                     refreshWorkspaceState();
                     recordWorkspaceChange();
                     statusMessageValue.setText("Przepięto " + endpointLabel + " przewodu " + updatedWire.id()
-                            + " do " + replacementPin.elementId() + ":" + replacementPin.pinKey() + ".");
+                            + " do " + formatEndpoint(replacementEndpoint) + ".");
                 }, () -> statusMessageValue.setText(
-                        "Nie udało się przepiąć przewodu. Sprawdź, czy wskazany pin istnieje i nie tworzy duplikatu połączenia."));
+                        "Nie udało się przepiąć przewodu. Sprawdź, czy wskazany punkt istnieje i nie tworzy duplikatu połączenia."));
     }
 
     private void runSimulation() {
@@ -1559,23 +1626,6 @@ public class MainLayout extends Div {
         setActiveComponent(component, true);
         setActiveTool(WorkspaceTool.forElementType(component.type()), true);
         statusMessageValue.setText("Tryb wstawiania: " + component.label() + ". Kliknij arkusz, aby dodać element.");
-    }
-
-    private void applyComponentFilter(String filterValue) {
-        String normalized = filterValue == null ? "" : filterValue.trim().toLowerCase(Locale.ROOT);
-        QuickComponent fallback = null;
-
-        for (Map.Entry<QuickComponent, Div> entry : quickComponentButtons.entrySet()) {
-            boolean visible = normalized.isBlank() || entry.getKey().matches(normalized);
-            entry.getValue().setVisible(visible);
-            if (visible && fallback == null) {
-                fallback = entry.getKey();
-            }
-        }
-
-        if (!quickComponentButtons.get(activeComponent).isVisible() && fallback != null) {
-            setActiveComponent(fallback, true);
-        }
     }
 
     private void setZoom(double nextZoom, boolean silent) {
@@ -2079,29 +2129,46 @@ public class MainLayout extends Div {
         LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> remappedWires = new LinkedHashMap<>();
         for (Map.Entry<String, WorkspaceMockService.WorkspaceWire> entry : workspaceWires.entrySet()) {
             WorkspaceMockService.WorkspaceWire wire = entry.getValue();
-            WorkspaceMockService.PinRef start = remapPinRef(wire.start(), currentId, nextId);
-            WorkspaceMockService.PinRef end = remapPinRef(wire.end(), currentId, nextId);
+            WorkspaceMockService.WireEndpointRef start = remapWireEndpoint(wire.start(), currentId, nextId);
+            WorkspaceMockService.WireEndpointRef end = remapWireEndpoint(wire.end(), currentId, nextId);
             remappedWires.put(entry.getKey(), new WorkspaceMockService.WorkspaceWire(wire.id(), start, end));
         }
         workspaceWires.clear();
         workspaceWires.putAll(remappedWires);
         if (pendingWireStart != null) {
-            pendingWireStart = remapPinRef(pendingWireStart, currentId, nextId);
+            pendingWireStart = remapWireEndpoint(pendingWireStart, currentId, nextId);
         }
     }
 
-    private WorkspaceMockService.PinRef remapPinRef(
-            WorkspaceMockService.PinRef pinRef,
+    private WorkspaceMockService.WireEndpointRef remapWireEndpoint(
+            WorkspaceMockService.WireEndpointRef endpoint,
             String currentId,
             String nextId) {
-        if (pinRef == null || !currentId.equals(pinRef.elementId())) {
-            return pinRef;
+        if (!(endpoint instanceof WorkspaceMockService.PinRef pinRef) || !currentId.equals(pinRef.elementId())) {
+            return endpoint;
         }
         return new WorkspaceMockService.PinRef(nextId, pinRef.pinKey());
     }
 
     private boolean sameCanvasCoordinate(double left, double right) {
         return Math.abs(left - right) < 0.01;
+    }
+
+    private String formatEndpoint(WorkspaceMockService.WireEndpointRef endpoint) {
+        return switch (endpoint) {
+            case WorkspaceMockService.PinRef pinRef -> pinRef.elementId() + ":" + pinRef.pinKey();
+            case WorkspaceMockService.FreePoint freePoint -> "punkt "
+                    + formatCanvasCoordinate(freePoint.x())
+                    + ","
+                    + formatCanvasCoordinate(freePoint.y());
+        };
+    }
+
+    private String formatCanvasCoordinate(double value) {
+        if (Math.abs(value - Math.rint(value)) < 0.0000001) {
+            return Long.toString(Math.round(value));
+        }
+        return String.format(Locale.US, "%.2f", value);
     }
 
     private void startWireEndpointEdit(WorkspaceMockService.WireEndpoint endpoint) {
@@ -2126,10 +2193,10 @@ public class MainLayout extends Div {
         pendingWireEndpoint = endpoint;
         syncWireControls();
 
-        WorkspaceMockService.PinRef currentPin =
+        WorkspaceMockService.WireEndpointRef currentEndpoint =
                 endpoint == WorkspaceMockService.WireEndpoint.START ? wire.start() : wire.end();
         statusMessageValue.setText("Przepinanie: " + endpoint.label().toLowerCase(Locale.ROOT) + " przewodu "
-                + wire.id() + ". Kliknij nowy pin zamiast " + currentPin.elementId() + ":" + currentPin.pinKey() + ".");
+                + wire.id() + ". Kliknij nowy pin albo punkt siatki zamiast " + formatEndpoint(currentEndpoint) + ".");
     }
 
     private void applySelectedNetName() {
@@ -2306,7 +2373,7 @@ public class MainLayout extends Div {
             selectedWireReadout.setText("brak");
             wireEditModeReadout.setText("-");
             schematicPreview.setSelectedWire(null);
-            schematicPreview.setFocusedPin(null);
+            schematicPreview.setFocusedEndpoint(null);
             return;
         }
 
@@ -2317,14 +2384,14 @@ public class MainLayout extends Div {
             selectedWireReadout.setText("brak");
             wireEditModeReadout.setText("-");
             schematicPreview.setSelectedWire(null);
-            schematicPreview.setFocusedPin(null);
+            schematicPreview.setFocusedEndpoint(null);
             return;
         }
 
         selectedWireReadout.setText(wire.id());
         wireEditModeReadout.setText(pendingWireEndpoint == null ? "-" : pendingWireEndpoint.label());
         schematicPreview.setSelectedWire(selectedWireId);
-        schematicPreview.setFocusedPin(resolveFocusedPin());
+        schematicPreview.setFocusedEndpoint(resolveFocusedEndpoint());
     }
 
     private int removeWiresForElement(String elementId) {
@@ -2338,7 +2405,7 @@ public class MainLayout extends Div {
             removed++;
         }
 
-        if (pendingWireStart != null && pendingWireStart.elementId().equals(elementId)) {
+        if (pendingWireStart instanceof WorkspaceMockService.PinRef pinRef && pinRef.elementId().equals(elementId)) {
             clearPendingWire();
         }
         if (selectedWireId != null && !workspaceWires.containsKey(selectedWireId)) {
@@ -2372,7 +2439,7 @@ public class MainLayout extends Div {
 
     private void clearPendingWireEndpoint() {
         pendingWireEndpoint = null;
-        schematicPreview.setFocusedPin(null);
+        schematicPreview.setFocusedEndpoint(null);
         if (selectedWireId != null) {
             syncWireControls();
         } else {
@@ -2380,7 +2447,7 @@ public class MainLayout extends Div {
         }
     }
 
-    private WorkspaceMockService.PinRef resolveFocusedPin() {
+    private WorkspaceMockService.WireEndpointRef resolveFocusedEndpoint() {
         if (selectedWireId == null || pendingWireEndpoint == null) {
             return null;
         }
@@ -2613,22 +2680,10 @@ public class MainLayout extends Div {
         Div componentBar = new Div();
         componentBar.addClassName("componentbar");
 
-        Span openLibrary = createAction("Komponent...", "tool-button");
-        openLibrary.addClickListener(event -> {
-            componentSearch.focus();
-            statusMessageValue.setText("Filtruj bibliotekę szybką albo kliknij symbol, aby aktywować tryb wstawiania.");
-        });
-
-        componentBar.add(buildComponentGroup(openLibrary, createLabel("Biblioteka")));
         Div quickComponents = buildComponentGroup();
         VISIBLE_QUICK_COMPONENTS.forEach(component -> quickComponents.add(createQuickComponent(component)));
         componentBar.add(quickComponents);
 
-        Span openLibraryDialog = createAction("Otwórz bibliotekę", "mini-button", "is-disabled");
-
-        Div fillGroup = buildComponentGroup(componentSearch, openLibraryDialog);
-        fillGroup.addClassName("is-fill");
-        componentBar.add(fillGroup);
         componentBar.add(buildComponentGroup(createLabel("Aktywny symbol"), activeSymbolReadout));
         return componentBar;
     }
@@ -2725,16 +2780,31 @@ public class MainLayout extends Div {
     }
 
     private Span createToolButton(WorkspaceTool tool) {
-        Span button = createAction(tool.shortLabel(), "rail-button");
+        Span button = createAction("", "rail-button");
         button.getElement().setAttribute("title", tool.label());
+        button.getElement().setAttribute("aria-label", tool.label());
+        button.add(createToolIcon(tool));
         button.addClickListener(event -> setActiveTool(tool, false));
         railButtons.put(tool, button);
         return button;
     }
 
     private Span createFitButton() {
-        Span button = createAction("D", "rail-button");
+        Span button = createAction("", "rail-button");
         button.getElement().setAttribute("title", "Dopasuj widok");
+        button.getElement().setAttribute("aria-label", "Dopasuj widok");
+        button.add(createRailIcon("""
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 4H4v4"/>
+                  <path d="M16 4h4v4"/>
+                  <path d="M20 16v4h-4"/>
+                  <path d="M8 20H4v-4"/>
+                  <path d="M4 4l5 5"/>
+                  <path d="M20 4l-5 5"/>
+                  <path d="M20 20l-5-5"/>
+                  <path d="M4 20l5-5"/>
+                </svg>
+                """));
         button.addClickListener(event -> fitView());
         return button;
     }
@@ -2775,10 +2845,7 @@ public class MainLayout extends Div {
         Span label = new Span(component.label());
         label.addClassName("active-symbol-label");
 
-        Span key = new Span(component.glyph());
-        key.addClassName("active-symbol-key");
-
-        activeSymbolReadout.add(createComponentIcon(component, "symbol-readout-icon"), label, key);
+        activeSymbolReadout.add(createComponentIcon(component, "symbol-readout-icon"), label);
     }
 
     private Component createComponentIcon(QuickComponent component, String className) {
@@ -2787,6 +2854,58 @@ public class MainLayout extends Div {
         icon.getElement().setAttribute("aria-hidden", "true");
         icon.setSvg(buildComponentIconSvg(component));
         return icon;
+    }
+
+    private Component createToolIcon(WorkspaceTool tool) {
+        return createRailIcon(buildToolIconSvg(tool));
+    }
+
+    private Component createRailIcon(String svgMarkup) {
+        Svg icon = new Svg();
+        icon.addClassName("rail-button-icon");
+        icon.getElement().setAttribute("aria-hidden", "true");
+        icon.setSvg(svgMarkup);
+        return icon;
+    }
+
+    private String buildToolIconSvg(WorkspaceTool tool) {
+        return switch (tool) {
+            case SELECT -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M5 3l13 10.5-6.3.8 3.4 5.9-2.8 1.5-3.3-5.9L5 20V3z" fill="currentColor" stroke="currentColor"/>
+                    </svg>
+                    """;
+            case WIRE -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="5" cy="7" r="2"/>
+                      <circle cx="19" cy="17" r="2"/>
+                      <path d="M7 7h6v10h4"/>
+                    </svg>
+                    """;
+            case PROBE -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M15.5 4.5l4 4"/>
+                      <path d="M17.5 6.5l-8.8 8.8"/>
+                      <path d="M8.7 15.3l-2.8 2.8"/>
+                      <path d="M5 21l3-3"/>
+                      <circle cx="18.5" cy="5.5" r="2"/>
+                    </svg>
+                    """;
+            case DELETE -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M8 7h8"/>
+                      <path d="M10 7V5h4v2"/>
+                      <path d="M9 10l.8 9h4.4l.8-9"/>
+                      <path d="M11 11.5v5"/>
+                      <path d="M13 11.5v5"/>
+                    </svg>
+                    """;
+            default -> """
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="12" cy="12" r="7"/>
+                    </svg>
+                    """;
+        };
     }
 
     private String buildComponentIconSvg(QuickComponent component) {
@@ -3033,27 +3152,21 @@ public class MainLayout extends Div {
     }
 
     private enum QuickComponent {
-        RESISTOR("R", "Rezystor", WorkspaceMockService.ElementType.RESISTOR),
-        CAPACITOR("C", "Kondensator", WorkspaceMockService.ElementType.CAPACITOR),
-        INDUCTOR("L", "Cewka", WorkspaceMockService.ElementType.INDUCTOR),
-        VOLTAGE("V", "Źródło napięcia", WorkspaceMockService.ElementType.VOLTAGE),
-        CURRENT("I", "Źródło prądu", WorkspaceMockService.ElementType.CURRENT),
-        GROUND("0", "Masa", WorkspaceMockService.ElementType.GROUND),
-        DIODE("D", "Dioda", WorkspaceMockService.ElementType.DIODE),
-        OPAMP("OP", "Wzmacniacz", WorkspaceMockService.ElementType.OPAMP);
+        RESISTOR("Rezystor", WorkspaceMockService.ElementType.RESISTOR),
+        CAPACITOR("Kondensator", WorkspaceMockService.ElementType.CAPACITOR),
+        INDUCTOR("Cewka", WorkspaceMockService.ElementType.INDUCTOR),
+        VOLTAGE("Źródło napięcia", WorkspaceMockService.ElementType.VOLTAGE),
+        CURRENT("Źródło prądu", WorkspaceMockService.ElementType.CURRENT),
+        GROUND("Masa", WorkspaceMockService.ElementType.GROUND),
+        DIODE("Dioda", WorkspaceMockService.ElementType.DIODE),
+        OPAMP("Wzmacniacz", WorkspaceMockService.ElementType.OPAMP);
 
-        private final String glyph;
         private final String label;
         private final WorkspaceMockService.ElementType type;
 
-        QuickComponent(String glyph, String label, WorkspaceMockService.ElementType type) {
-            this.glyph = glyph;
+        QuickComponent(String label, WorkspaceMockService.ElementType type) {
             this.label = label;
             this.type = type;
-        }
-
-        public String glyph() {
-            return glyph;
         }
 
         public String label() {
@@ -3062,12 +3175,6 @@ public class MainLayout extends Div {
 
         public WorkspaceMockService.ElementType type() {
             return type;
-        }
-
-        public boolean matches(String filter) {
-            String normalizedLabel = label.toLowerCase(Locale.ROOT);
-            String normalizedGlyph = glyph.toLowerCase(Locale.ROOT);
-            return normalizedLabel.contains(filter) || normalizedGlyph.contains(filter);
         }
     }
 }
