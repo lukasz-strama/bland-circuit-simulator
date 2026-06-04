@@ -26,6 +26,7 @@ public final class SchematicPreview extends Div {
     private static final String CANVAS_Y_DATA = "event.clientY - event.currentTarget.getBoundingClientRect().top";
 
     private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
+    private final Span titleBlockProjectText = titleText(14, 8, 364, "Projekt: filtr_rlc_lab.asc");
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
     private final Map<String, Div> selectableWires = new LinkedHashMap<>();
     private final Map<String, Div> selectablePins = new LinkedHashMap<>();
@@ -137,6 +138,10 @@ public final class SchematicPreview extends Div {
         if (draggedPart != null) {
             draggedPart.addClassName("is-dragging");
         }
+    }
+
+    public void setWorkspaceName(String name) {
+        titleBlockProjectText.setText("Projekt: " + (name == null || name.isBlank() ? "Bez nazwy" : name.trim()));
     }
 
     private Component createSheetNote() {
@@ -262,7 +267,7 @@ public final class SchematicPreview extends Div {
                 hLine("title-divider", 0, 56, 392),
                 vLine("title-divider is-vertical", 298, 28, 58),
                 vLine("title-divider is-vertical", 332, 56, 30),
-                titleText(14, 8, 364, "Projekt: Filtr RLC - ćwiczenie 04"),
+                titleBlockProjectText,
                 titleText(14, 36, 276, "Autor: Laboratorium EE / grupa A2"),
                 titleText(308, 36, 76, "Arkusz: 1 / 1"),
                 titleText(14, 64, 310, "Tryb: makieta edytowalna"),

@@ -12,6 +12,7 @@ import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.PasswordField;
 import com.vaadin.flow.component.textfield.TextField;
+import com.vaadin.flow.data.value.ValueChangeMode;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 import pl.polsl.bland.models.CircuitSchematic;
@@ -36,7 +37,7 @@ import java.util.Map;
 @Route("")
 @PageTitle("Bland Circuit Simulator")
 public class MainLayout extends Div {
-    private static final String PROJECT_FILE_NAME = "filtr_rlc_lab.asc";
+    private static final String DEFAULT_WORKSPACE_NAME = "filtr_rlc_lab.asc";
     private static final String ANALYSIS_TRANSIENT = "Analiza przejściowa";
     private static final String ANALYSIS_DC = "Punkt pracy DC";
     private static final double DEFAULT_ZOOM = 0.92;
@@ -95,6 +96,7 @@ public class MainLayout extends Div {
     private final Select<WorkspaceMockService.WireRoutingMode> wireRoutingSelect = new Select<>();
     private final TextField analysisTstopField = new TextField();
     private final TextField analysisTstepField = new TextField();
+    private final TextField workspaceNameField = new TextField();
     private final TextField elementValueField = new TextField();
     private final TextField sourceFrequencyField = new TextField();
     private final TextField netNameField = new TextField();
@@ -104,6 +106,7 @@ public class MainLayout extends Div {
     private final List<WorkspaceSnapshot> workspaceHistory = new ArrayList<>();
 
     private String analysisLabel = ANALYSIS_TRANSIENT;
+    private String workspaceName = DEFAULT_WORKSPACE_NAME;
     private WorkspaceTool activeTool = WorkspaceTool.SELECT;
     private QuickComponent activeComponent = QuickComponent.RESISTOR;
     private String selectedElementId;
@@ -190,6 +193,7 @@ public class MainLayout extends Div {
         configureSourceFrequencyField();
         configureNetNameField();
         configureWireRoutingSelect();
+        configureWorkspaceNameField();
         configureBackendControls();
         configureHistoryButtons();
         configureKeyboardShortcuts();
@@ -277,6 +281,15 @@ public class MainLayout extends Div {
         });
     }
 
+    private void configureWorkspaceNameField() {
+        workspaceNameField.setPlaceholder("Nazwa arkusza");
+        workspaceNameField.addClassName("workspace-name-field");
+        workspaceNameField.setClearButtonVisible(true);
+        workspaceNameField.setValueChangeMode(ValueChangeMode.EAGER);
+        workspaceNameField.addValueChangeListener(event -> setWorkspaceName(event.getValue(), false));
+        setWorkspaceName(workspaceName, true);
+    }
+
     private void configureBackendControls() {
         backendAuthButton.addClickListener(event -> openBackendAuthDialog());
         backendLogoutButton.addClickListener(event -> logoutFromBackend());
@@ -355,6 +368,7 @@ public class MainLayout extends Div {
         workspaceWires.putAll(workspaceMockService.createInitialWires());
         netAliases.clear();
         backendProjectId = null;
+        setWorkspaceName(DEFAULT_WORKSPACE_NAME, true);
         dragState = null;
         suppressNextCanvasClick = false;
         selectedWireId = null;
@@ -972,7 +986,8 @@ public class MainLayout extends Div {
             CircuitSchematic storedSchematic = persistProjectToBackend();
             updateProjectControls();
             statusMessageValue.setText("Zapisano projekt w backendzie jako #" + storedSchematic.id()
-                    + ": " + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
+                    + " (" + workspaceName + "): "
+                    + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
         } catch (IllegalArgumentException | IllegalStateException exception) {
             updateBackendControls();
             statusMessageValue.setText(exception.getMessage());
@@ -1061,6 +1076,7 @@ public class MainLayout extends Div {
         netAliases.clear();
         netAliases.putAll(importedState.netAliases());
         backendProjectId = storedSchematic.id();
+        setWorkspaceName(storedSchematic.name(), true);
         selectedElementId = workspaceMockService.firstElement(workspaceElements)
                 .map(WorkspaceMockService.WorkspaceElement::id)
                 .orElse(null);
@@ -1079,7 +1095,8 @@ public class MainLayout extends Div {
         updateBackendControls();
         updateSimulationIndicators();
         statusMessageValue.setText("Wczytano projekt #" + storedSchematic.id()
-                + ": " + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
+                + " (" + workspaceName + "): "
+                + workspaceElements.size() + " elementów / " + workspaceWires.size() + " przewodów.");
     }
 
     private void updateProjectControls() {
@@ -1588,14 +1605,30 @@ public class MainLayout extends Div {
     private CircuitSchematic persistProjectToBackend() {
         var resolvedWires = workspaceMockService.resolveWires(workspaceElements, workspaceWires.values(), wireRoutingMode);
         CircuitSchematic schematic = workspaceExportService.exportSchematic(
-                PROJECT_FILE_NAME,
+                workspaceName,
                 workspaceElements,
                 resolvedWires,
                 workspaceNetTopology);
         CircuitSchematic storedSchematic = backendClient.saveProject(backendProjectId, schematic);
         backendProjectId = storedSchematic.id();
+        setWorkspaceName(storedSchematic.name(), true);
         updateBackendControls();
         return storedSchematic;
+    }
+
+    private void setWorkspaceName(String nextName, boolean updateField) {
+        workspaceName = normalizeWorkspaceName(nextName);
+        schematicPreview.setWorkspaceName(workspaceName);
+        if (updateField && !workspaceName.equals(workspaceNameField.getValue())) {
+            workspaceNameField.setValue(workspaceName);
+        }
+    }
+
+    private String normalizeWorkspaceName(String rawName) {
+        if (rawName == null || rawName.isBlank()) {
+            return DEFAULT_WORKSPACE_NAME;
+        }
+        return rawName.trim();
     }
 
     private void toggleResultsWindow(boolean visible) {
@@ -2563,7 +2596,7 @@ public class MainLayout extends Div {
 
         Div meta = new Div();
         meta.addClassName("menubar-meta");
-        meta.add(new Span("Projekt: " + PROJECT_FILE_NAME));
+        meta.add(buildMenuMetaField("Arkusz", workspaceNameField));
         meta.add(new Span("Arkusz 1 / 1"));
         meta.add(backendSessionReadout, backendProjectReadout, backendAuthButton, backendLogoutButton);
         menuBar.add(meta);
@@ -2577,6 +2610,15 @@ public class MainLayout extends Div {
         Span button = new Span(label);
         button.addClassName("menu-button");
         group.add(button);
+        return group;
+    }
+
+    private Div buildMenuMetaField(String label, Component field) {
+        Div group = new Div();
+        group.addClassName("menu-meta-field");
+        Span labelSpan = new Span(label);
+        labelSpan.addClassName("menu-meta-label");
+        group.add(labelSpan, field);
         return group;
     }
 

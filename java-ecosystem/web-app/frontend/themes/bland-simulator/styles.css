@@ -89,8 +89,24 @@ body {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   color: var(--text-dim);
+  font-size: 11px;
+}
+
+.menu-meta-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.menu-meta-label {
+  white-space: nowrap;
+}
+
+vaadin-text-field.workspace-name-field {
+  width: 190px;
   font-size: 11px;
 }
 
