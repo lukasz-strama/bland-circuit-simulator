@@ -197,10 +197,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.toolbar-readout.is-analysis-summary {
-  max-width: 320px;
-}
-
 vaadin-select.toolbar-select {
   width: 176px;
 }

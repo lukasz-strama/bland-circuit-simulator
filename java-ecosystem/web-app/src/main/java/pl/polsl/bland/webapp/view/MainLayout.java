@@ -65,7 +65,6 @@ public class MainLayout extends Div {
     private final LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> workspaceWires = new LinkedHashMap<>();
     private final Div workspacePanel = new Div();
     private final Span activeSymbolReadout = createActiveSymbolReadout();
-    private final Span analysisConfigReadout = createWideReadout("");
     private final Span undoButton = createAction("Cofnij", "tool-button");
     private final Span redoButton = createAction("Ponów", "tool-button");
     private final Span loadProjectButton = createAction("Wczytaj", "tool-button");
@@ -347,7 +346,6 @@ public class MainLayout extends Div {
         simulationSettingsWindow.addClassNames("floating-window", "is-simulation-window");
         simulationSettingsWindow.setVisible(false);
         simulationSettingsWindow.add(buildSimulationSettingsTitleBar(), buildSimulationSettingsBody());
-        analysisConfigReadout.addClassName("is-analysis-summary");
     }
 
     private void resetWorkspace() {
@@ -1837,7 +1835,6 @@ public class MainLayout extends Div {
             analysisTstepField.setValue(tstepValue);
         }
 
-        analysisConfigReadout.setText(buildAnalysisSummary());
         simulationSettingsCaption.setText(enabled ? "Analiza transient przygotowana do wysłania." : "Analiza punktu pracy bez parametrów czasowych.");
         simulationSettingsHint.setText(enabled
                 ? "Ustaw parametry tstop i tstep, aby frontend był gotowy na docelowy request transient do backendu."
@@ -1862,17 +1859,6 @@ public class MainLayout extends Div {
             throw new IllegalArgumentException("Parametr " + label + " musi być większy od zera.");
         }
         return parsed;
-    }
-
-    private String buildAnalysisSummary() {
-        if (resolveAnalysisType() == SimulationRequest.AnalysisType.DC) {
-            return "DC | bez parametrów transientu";
-        }
-        return "TRAN | tstop="
-                + formatAnalysisParameter(transientTstop)
-                + " s | tstep="
-                + formatAnalysisParameter(transientTstep)
-                + " s";
     }
 
     private String buildAnalysisDirectivePreview() {
@@ -2673,10 +2659,6 @@ public class MainLayout extends Div {
         Span showResults = createAction("Pokaż wyniki", "tool-button");
         showResults.addClickListener(event -> toggleResultsWindow(true));
 
-        Span simulationSettingsButton = createAction("Ustawienia", "tool-button");
-        simulationSettingsButton.addClickListener(
-                event -> setSimulationSettingsWindowVisible(!simulationSettingsWindow.isVisible(), true));
-
         Span renameNet = createAction("Nazwij", "mini-button");
         renameNet.addClickListener(event -> applySelectedNetName());
 
@@ -2749,11 +2731,6 @@ public class MainLayout extends Div {
                 exportProject,
                 simulate,
                 showResults));
-        toolbar.add(separator());
-        toolbar.add(buildToolbarGroup(
-                createLabel("Analiza"),
-                analysisConfigReadout,
-                simulationSettingsButton));
         toolbar.add(separator());
         toolbar.add(buildToolbarGroup(createLabel("Narzędzie"), toolbarToolValue));
         toolbar.add(separator());
