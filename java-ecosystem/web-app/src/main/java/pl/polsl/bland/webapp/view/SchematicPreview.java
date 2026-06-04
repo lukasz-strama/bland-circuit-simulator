@@ -229,7 +229,10 @@ public final class SchematicPreview extends Div {
 
         String wireId = event.getEventData().getString(CLICKED_WIRE_DATA);
         if (wireId != null && !wireId.isBlank()) {
-            interactionHandler.onWireClick(wireId);
+            interactionHandler.onWireClick(
+                    wireId,
+                    event.getEventData().getNumber(CANVAS_X_DATA),
+                    event.getEventData().getNumber(CANVAS_Y_DATA));
             return;
         }
 
@@ -622,6 +625,6 @@ public final class SchematicPreview extends Div {
 
         void onNetClick(String netKey);
 
-        void onWireClick(String wireId);
+        void onWireClick(String wireId, double canvasX, double canvasY);
     }
 }

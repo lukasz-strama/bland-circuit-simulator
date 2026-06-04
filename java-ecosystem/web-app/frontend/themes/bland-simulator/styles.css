@@ -1054,10 +1054,13 @@ vaadin-select.trace-select {
 }
 
 .workspace-panel[data-tool="select"] .wire-segment,
-.workspace-panel[data-tool="wire"] .wire-segment,
 .workspace-panel[data-tool="select"] .wire-junction,
 .workspace-panel[data-tool="wire"] .wire-junction {
   cursor: pointer;
+}
+
+.workspace-panel[data-tool="wire"] .wire-segment {
+  cursor: crosshair;
 }
 
 .workspace-panel[data-tool="delete"] .wire-segment,

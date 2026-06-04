@@ -179,8 +179,8 @@ public class MainLayout extends Div {
             }
 
             @Override
-            public void onWireClick(String wireId) {
-                handleWireClick(wireId);
+            public void onWireClick(String wireId, double canvasX, double canvasY) {
+                handleWireClick(wireId, canvasX / zoom, canvasY / zoom);
             }
         });
 
@@ -766,7 +766,7 @@ public class MainLayout extends Div {
                 }, () -> statusMessageValue.setText("Taki przewód już istnieje albo wskazane punkty są nieprawidłowe."));
     }
 
-    private void handleWireClick(String wireId) {
+    private void handleWireClick(String wireId, double canvasX, double canvasY) {
         if (!workspaceWires.containsKey(wireId)) {
             return;
         }
@@ -779,12 +779,59 @@ public class MainLayout extends Div {
             return;
         }
 
-        showWireSelection(wireId);
         if (activeTool == WorkspaceTool.WIRE) {
-            statusMessageValue.setText("Wybrano przewód " + wireId + ". Użyj toolbaru, aby przepiąć jego początek albo koniec.");
-        } else {
-            statusMessageValue.setText("Wybrano przewód " + wireId + ".");
+            handleWireJunctionClick(wireId, canvasX, canvasY);
+            return;
         }
+
+        showWireSelection(wireId);
+        statusMessageValue.setText("Wybrano przewód " + wireId + ".");
+    }
+
+    private void handleWireJunctionClick(String wireId, double canvasX, double canvasY) {
+        WorkspaceMockService.FreePoint junction = workspaceMockService.createFreePoint(canvasX, canvasY);
+        boolean splitExistingWire = pendingWireEndpoint != null && wireId.equals(selectedWireId)
+                ? false
+                : splitWireAtJunction(wireId, junction);
+
+        if (pendingWireEndpoint != null && selectedWireId != null) {
+            reconnectSelectedWire(junction);
+            return;
+        }
+
+        if (pendingWireStart != null) {
+            finishWireAt(junction);
+            return;
+        }
+
+        pendingWireStart = junction;
+        selectedWireId = wireId;
+        selectedElementId = null;
+        selectedNetKey = null;
+        if (splitExistingWire) {
+            refreshWorkspaceState();
+            recordWorkspaceChange();
+        } else {
+            renderWorkspace();
+            syncWireControls();
+        }
+        statusMessageValue.setText("Początek przewodu ustawiono na " + formatEndpoint(junction)
+                + ". Kliknij pin, punkt siatki albo inny przewód.");
+    }
+
+    private boolean splitWireAtJunction(String wireId, WorkspaceMockService.WireEndpointRef junction) {
+        WorkspaceMockService.WorkspaceWire wire = workspaceWires.get(wireId);
+        if (wire == null || wire.start().equals(junction) || wire.end().equals(junction)) {
+            return false;
+        }
+
+        return workspaceMockService.createWire(workspaceElements, workspaceWires.values(), junction, wire.end())
+                .map(secondSegment -> {
+                    workspaceWires.put(wire.id(), new WorkspaceMockService.WorkspaceWire(wire.id(), wire.start(), junction));
+                    workspaceWires.put(secondSegment.id(), secondSegment);
+                    return true;
+                })
+                .orElse(false);
     }
 
     private void handleNetClick(String netKey) {
