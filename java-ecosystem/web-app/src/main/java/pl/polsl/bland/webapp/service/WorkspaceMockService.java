@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -335,6 +336,26 @@ public class WorkspaceMockService {
             }
         }
         return Optional.empty();
+    }
+
+    public List<PinRef> resolvePinsNear(
+            Map<String, WorkspaceElement> elements,
+            double canvasX,
+            double canvasY,
+            double tolerance) {
+        List<NearbyPin> nearbyPins = new ArrayList<>();
+        for (WorkspaceElement element : elements.values()) {
+            for (PinPosition pin : pinsForElement(element)) {
+                double distance = Math.hypot(pin.x() - canvasX, pin.y() - canvasY);
+                if (distance <= tolerance) {
+                    nearbyPins.add(new NearbyPin(new PinRef(pin.elementId(), pin.pinKey()), distance));
+                }
+            }
+        }
+        nearbyPins.sort(Comparator.comparingDouble(NearbyPin::distance));
+        return nearbyPins.stream()
+                .map(NearbyPin::pinRef)
+                .toList();
     }
 
     public WireEndpointRef resolveEndpointAt(Map<String, WorkspaceElement> elements, double canvasX, double canvasY) {
@@ -1489,6 +1510,9 @@ public class WorkspaceMockService {
     }
 
     private record EndpointPosition(WireEndpointRef endpoint, double x, double y, PinDirection direction) {
+    }
+
+    private record NearbyPin(PinRef pinRef, double distance) {
     }
 
     public record WirePoint(double x, double y) {

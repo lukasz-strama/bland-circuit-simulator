@@ -6,13 +6,17 @@ import pl.polsl.bland.models.CircuitSchematic;
 import pl.polsl.bland.models.Wire;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 @Service
 public class WorkspaceSchematicMapper {
     private static final double GRID_STEP = 16.0;
+    private static final double STORED_POINT_PIN_TOLERANCE = GRID_STEP;
+    private static final double GROUND_INFERENCE_PIN_TOLERANCE = GRID_STEP / 2.0;
 
     private final WorkspaceMockService workspaceMockService;
 
@@ -26,21 +30,20 @@ public class WorkspaceSchematicMapper {
         }
 
         LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements = importElements(schematic.elements());
-        addInferredGrounds(schematic.wires(), elements);
+        LinkedHashMap<WorkspaceMockService.PinRef, String> pinNodes = importPinNodes(schematic.elements());
+        addInferredGrounds(schematic.wires(), elements, pinNodes);
 
         LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> wires = new LinkedHashMap<>();
         LinkedHashMap<String, String> wireNodes = new LinkedHashMap<>();
         int fallbackWireIndex = 1;
         for (Wire wire : nullToEmpty(schematic.wires())) {
-            ImportedWire importedWire = importWire(wire, elements, wires, fallbackWireIndex);
-            if (importedWire == null) {
-                continue;
+            for (ImportedWire importedWire : importWires(wire, elements, wires, fallbackWireIndex, pinNodes)) {
+                wires.put(importedWire.wire().id(), importedWire.wire());
+                if (wire.node() != null && !wire.node().isBlank()) {
+                    wireNodes.put(importedWire.wire().id(), wire.node().trim());
+                }
+                fallbackWireIndex++;
             }
-            wires.put(importedWire.wire().id(), importedWire.wire());
-            if (wire.node() != null && !wire.node().isBlank()) {
-                wireNodes.put(importedWire.wire().id(), wire.node().trim());
-            }
-            fallbackWireIndex++;
         }
 
         LinkedHashMap<String, String> netAliases = restoreNetAliases(elements, wires, wireNodes);
@@ -79,44 +82,163 @@ public class WorkspaceSchematicMapper {
         return elements;
     }
 
+    private LinkedHashMap<WorkspaceMockService.PinRef, String> importPinNodes(List<CircuitElement> storedElements) {
+        LinkedHashMap<WorkspaceMockService.PinRef, String> pinNodes = new LinkedHashMap<>();
+        for (CircuitElement element : nullToEmpty(storedElements)) {
+            if (element.id() == null || element.id().isBlank() || element.type() == null) {
+                continue;
+            }
+            switch (element.type()) {
+                case R, L, C -> {
+                    putPinNode(pinNodes, element.id(), "A", element.node1());
+                    putPinNode(pinNodes, element.id(), "B", element.node2());
+                }
+                case V, I -> {
+                    putPinNode(pinNodes, element.id(), "POS", element.node1());
+                    putPinNode(pinNodes, element.id(), "NEG", element.node2());
+                }
+            }
+        }
+        return pinNodes;
+    }
+
+    private void putPinNode(
+            LinkedHashMap<WorkspaceMockService.PinRef, String> pinNodes,
+            String elementId,
+            String pinKey,
+            String nodeName) {
+        if (nodeName != null && !nodeName.isBlank()) {
+            pinNodes.put(new WorkspaceMockService.PinRef(elementId, pinKey), nodeName.trim());
+        }
+    }
+
     private void addInferredGrounds(
             List<Wire> storedWires,
-            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements) {
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            LinkedHashMap<WorkspaceMockService.PinRef, String> pinNodes) {
         for (Wire wire : nullToEmpty(storedWires)) {
             if (!"0".equals(wire.node())) {
                 continue;
             }
             for (CanvasPoint endpoint : endpointPoints(wire)) {
-                if (workspaceMockService.resolvePinAt(elements, endpoint.x(), endpoint.y()).isPresent()) {
+                if (resolveStoredPinAt(
+                        elements,
+                        endpoint,
+                        wire.node(),
+                        pinNodes,
+                        GROUND_INFERENCE_PIN_TOLERANCE).isPresent()) {
                     continue;
                 }
                 WorkspaceMockService.WorkspaceElement ground =
                         workspaceMockService.createGroundAtRefPoint(elements.values(), endpoint.x(), endpoint.y());
                 elements.put(ground.id(), ground);
+                pinNodes.put(new WorkspaceMockService.PinRef(ground.id(), "REF"), "0");
             }
         }
     }
 
-    private ImportedWire importWire(
+    private List<ImportedWire> importWires(
             Wire wire,
             LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
             LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> existingWires,
-            int fallbackWireIndex) {
-        List<CanvasPoint> endpoints = endpointPoints(wire);
-        if (endpoints.size() < 2) {
-            return null;
+            int fallbackWireIndex,
+            Map<WorkspaceMockService.PinRef, String> pinNodes) {
+        List<CanvasPoint> points = pathPoints(wire);
+        if (points.size() < 2) {
+            return List.of();
         }
 
-        WorkspaceMockService.WireEndpointRef start =
-                workspaceMockService.resolveEndpointAt(elements, endpoints.get(0).x(), endpoints.get(0).y());
-        WorkspaceMockService.WireEndpointRef end =
-                workspaceMockService.resolveEndpointAt(elements, endpoints.get(1).x(), endpoints.get(1).y());
-        if (start.equals(end)) {
-            return null;
-        }
+        LinkedHashMap<String, WorkspaceMockService.WorkspaceWire> importedAndExistingWires =
+                new LinkedHashMap<>(existingWires);
+        List<ImportedWire> importedWires = new ArrayList<>();
+        int nextFallbackIndex = fallbackWireIndex;
+        for (int index = 0; index < points.size() - 1; index++) {
+            CanvasPoint from = points.get(index);
+            CanvasPoint to = points.get(index + 1);
+            WorkspaceMockService.WireEndpointRef start =
+                    resolveStoredEndpointAt(elements, from, wire.node(), pinNodes);
+            WorkspaceMockService.WireEndpointRef end =
+                    resolveStoredEndpointAt(elements, to, wire.node(), pinNodes);
+            if (start.equals(end)) {
+                List<WorkspaceMockService.PinRef> collapsedPins =
+                        resolveStoredPinsAt(elements, from, wire.node(), pinNodes, STORED_POINT_PIN_TOLERANCE);
+                for (int collapsedIndex = 1; collapsedIndex < collapsedPins.size(); collapsedIndex++) {
+                    WorkspaceMockService.PinRef collapsedStart = collapsedPins.get(0);
+                    WorkspaceMockService.PinRef collapsedEnd = collapsedPins.get(collapsedIndex);
+                    if (workspaceMockService.createWire(
+                            elements,
+                            importedAndExistingWires.values(),
+                            collapsedStart,
+                            collapsedEnd).isEmpty()) {
+                        continue;
+                    }
+                    String storedId = importedWires.isEmpty() ? wire.id() : null;
+                    String wireId = uniqueWireId(storedId, importedAndExistingWires, nextFallbackIndex);
+                    WorkspaceMockService.WorkspaceWire importedWire =
+                            new WorkspaceMockService.WorkspaceWire(wireId, collapsedStart, collapsedEnd);
+                    importedAndExistingWires.put(importedWire.id(), importedWire);
+                    importedWires.add(new ImportedWire(importedWire));
+                    nextFallbackIndex++;
+                }
+                continue;
+            }
+            if (workspaceMockService.createWire(elements, importedAndExistingWires.values(), start, end).isEmpty()) {
+                continue;
+            }
 
-        String wireId = uniqueWireId(wire.id(), existingWires, fallbackWireIndex);
-        return new ImportedWire(new WorkspaceMockService.WorkspaceWire(wireId, start, end));
+            String storedId = importedWires.isEmpty() ? wire.id() : null;
+            String wireId = uniqueWireId(storedId, importedAndExistingWires, nextFallbackIndex);
+            WorkspaceMockService.WorkspaceWire importedWire =
+                    new WorkspaceMockService.WorkspaceWire(wireId, start, end);
+            importedAndExistingWires.put(importedWire.id(), importedWire);
+            importedWires.add(new ImportedWire(importedWire));
+            nextFallbackIndex++;
+        }
+        return importedWires;
+    }
+
+    private WorkspaceMockService.WireEndpointRef resolveStoredEndpointAt(
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            CanvasPoint point,
+            String nodeName,
+            Map<WorkspaceMockService.PinRef, String> pinNodes) {
+        return resolveStoredPinAt(elements, point, nodeName, pinNodes)
+                .<WorkspaceMockService.WireEndpointRef>map(pinRef -> pinRef)
+                .orElseGet(() -> workspaceMockService.createFreePoint(point.x(), point.y()));
+    }
+
+    private Optional<WorkspaceMockService.PinRef> resolveStoredPinAt(
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            CanvasPoint point,
+            String nodeName,
+            Map<WorkspaceMockService.PinRef, String> pinNodes) {
+        return resolveStoredPinAt(elements, point, nodeName, pinNodes, STORED_POINT_PIN_TOLERANCE);
+    }
+
+    private Optional<WorkspaceMockService.PinRef> resolveStoredPinAt(
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            CanvasPoint point,
+            String nodeName,
+            Map<WorkspaceMockService.PinRef, String> pinNodes,
+            double tolerance) {
+        return resolveStoredPinsAt(elements, point, nodeName, pinNodes, tolerance).stream().findFirst();
+    }
+
+    private List<WorkspaceMockService.PinRef> resolveStoredPinsAt(
+            LinkedHashMap<String, WorkspaceMockService.WorkspaceElement> elements,
+            CanvasPoint point,
+            String nodeName,
+            Map<WorkspaceMockService.PinRef, String> pinNodes,
+            double tolerance) {
+        String normalizedNodeName = nodeName == null ? "" : nodeName.trim();
+        List<WorkspaceMockService.PinRef> nearbyPins =
+                workspaceMockService.resolvePinsNear(elements, point.x(), point.y(), tolerance);
+        if (!normalizedNodeName.isBlank()) {
+            return nearbyPins.stream()
+                    .filter(pinRef -> normalizedNodeName.equals(pinNodes.get(pinRef)))
+                    .toList();
+        }
+        return nearbyPins;
     }
 
     private LinkedHashMap<String, String> restoreNetAliases(
@@ -141,19 +263,27 @@ public class WorkspaceSchematicMapper {
     }
 
     private List<CanvasPoint> endpointPoints(Wire wire) {
+        List<CanvasPoint> points = pathPoints(wire);
+        if (points.size() < 2) {
+            return List.of();
+        }
+
+        return List.of(points.get(0), points.get(points.size() - 1));
+    }
+
+    private List<CanvasPoint> pathPoints(Wire wire) {
         if (wire == null || wire.points() == null || wire.points().size() < 2) {
             return List.of();
         }
 
-        int[] first = wire.points().get(0);
-        int[] last = wire.points().get(wire.points().size() - 1);
-        if (!isValidPoint(first) || !isValidPoint(last)) {
-            return List.of();
+        List<CanvasPoint> points = new ArrayList<>();
+        for (int[] rawPoint : wire.points()) {
+            if (!isValidPoint(rawPoint)) {
+                return List.of();
+            }
+            points.add(new CanvasPoint(gridToCanvas(rawPoint[0]), gridToCanvas(rawPoint[1])));
         }
-
-        return List.of(
-                new CanvasPoint(gridToCanvas(first[0]), gridToCanvas(first[1])),
-                new CanvasPoint(gridToCanvas(last[0]), gridToCanvas(last[1])));
+        return points;
     }
 
     private WorkspaceMockService.ElementType mapElementType(CircuitElement.ElementType type) {
