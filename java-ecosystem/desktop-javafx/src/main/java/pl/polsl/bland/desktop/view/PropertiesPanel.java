@@ -9,6 +9,19 @@ import pl.polsl.bland.desktop.service.WorkspaceService;
 
 import java.util.Map;
 
+/**
+ * Panel boczny wyświetlający i umożliwiający edycję właściwości zaznaczonego elementu.
+ *
+ * Funkcjonalność:
+ * <ul>
+ *     <li>wyświetlanie ID elementu,</li>
+ *     <li>edycja wartości (np. rezystancji, pojemności),</li>
+ *     <li>obracanie elementu o 90°,</li>
+ *     <li>aktualizacja mapy elementów i odświeżanie widoku.</li>
+ * </ul>
+ *
+ * Panel nie renderuje grafiki — jedynie modyfikuje dane w WorkspaceService.
+ */
 public class PropertiesPanel extends VBox {
 
     private final Map<String, WorkspaceService.WorkspaceElement> elements;
@@ -23,6 +36,13 @@ public class PropertiesPanel extends VBox {
 
     private WorkspaceService.WorkspaceElement current;
 
+    /**
+     * Tworzy panel właściwości.
+     *
+     * @param elements mapa elementów edytora
+     * @param refresh funkcja odświeżająca widok
+     * @param workspace logika elementów (rotacja, wartości)
+     */
     public PropertiesPanel(
             Map<String, WorkspaceService.WorkspaceElement> elements,
             Runnable refresh,
@@ -43,6 +63,11 @@ public class PropertiesPanel extends VBox {
         getChildren().addAll(title, idLabel, valueField, applyButton, rotateButton);
     }
 
+    /**
+     * Wyświetla właściwości wskazanego elementu.
+     *
+     * @param el element lub null (gdy nic nie zaznaczono)
+     */
     public void showElement(WorkspaceService.WorkspaceElement el) {
         current = el;
 
@@ -56,6 +81,9 @@ public class PropertiesPanel extends VBox {
         valueField.setText(el.value());
     }
 
+    /**
+     * Zapisuje nową wartość elementu i odświeża widok.
+     */
     private void applyValue() {
         if (current == null) return;
 
@@ -73,6 +101,9 @@ public class PropertiesPanel extends VBox {
         refresh.run();
     }
 
+    /**
+     * Obraca zaznaczony element o 90° i odświeża widok.
+     */
     private void rotateCurrent() {
         if (current == null) return;
 

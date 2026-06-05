@@ -14,32 +14,51 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Klient HTTP komunikujący się z backendem Spring Boot.
- * Domyślnie zakłada backend na localhost:8080.
- * Zmień BASE_URL jeśli backend działa na innym hoście/porcie.
+ * Serwis odpowiedzialny za komunikację z backendem Spring Boot.
+ * Obsługuje:
+ * - logowanie i rejestrację użytkowników,
+ * - zapis schematów do bazy danych,
+ * - odczyt schematów,
+ * - tryb gościa (bez możliwości zapisu/odczytu).
+ *
+ * Serwis działa jako singleton — instancja dostępna przez {@link ApiService#get()}.
  */
 public class ApiService {
 
-    private static final String BASE_URL =
-            System.getProperty("bland.api.url", "http://localhost:8080/api");
-
+    /** Bazowy URL backendu Spring Boot. */
+    private static final String BASE_URL = "http://localhost:8080/api";
+    
+    /** Klient HTTP używany do komunikacji z backendem. */
     private final HttpClient http = HttpClient.newBuilder()
             .connectTimeout(Duration.ofSeconds(5))
             .build();
 
+    /** Mapper JSON obsługujący daty i konwersję obiektów. */
     private final ObjectMapper mapper = new ObjectMapper()
         .registerModule(new JavaTimeModule())
         .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
         .configure(com.fasterxml.jackson.databind.DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
 
- 
+        /** Token JWT aktualnie zalogowanego użytkownika. */
         private String jwtToken;
 
         public void setJwtToken(String jwtToken) {
     this.jwtToken = jwtToken;
 }
 
+    /**
+     * Zapisuje schemat w bazie danych backendu.
+     *
+     * @param name nazwa schematu
+     * @param schematic obiekt schematu
+     * @return ID zapisanego schematu
+     * @throws Exception gdy użytkownik jest w trybie gościa lub backend zwróci błąd
+     */
     public Long saveSchematic(String name, CircuitSchematic schematic) throws Exception {
+        if (guestMode) {
+    throw new RuntimeException("Tryb gościa - zapis wraz z odczytem są zablokowane.");
+}
+
     Map<String, Object> payload = new HashMap<>();
     payload.put("name", name);
     payload.put("elements", schematic.elements()); 
@@ -71,6 +90,12 @@ System.out.println("koniec zapisu");
         return id == null ? null : id.longValue();
     }
 
+    /**
+     * Pobiera listę metadanych wszystkich schematów użytkownika.
+     *
+     * @return lista metadanych schematów
+     * @throws Exception gdy backend zwróci błąd
+     */
     public List<SchematicMeta> listSchematics() throws Exception {
 
     HttpRequest request = HttpRequest.newBuilder()
@@ -103,7 +128,18 @@ System.out.println("koniec zapisu");
             .toList();
 }
 
+    /**
+     * Wczytuje schemat o podanym ID.
+     *
+     * @param id identyfikator schematu
+     * @return obiekt CircuitSchematic
+     * @throws Exception gdy użytkownik jest w trybie gościa lub backend zwróci błąd
+     */
     public CircuitSchematic loadSchematic(long id) throws Exception {
+        if (guestMode) {
+    throw new RuntimeException("Tryb gościa - zapis wraz z odczytem są zablokowane.");
+}
+
 
     HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(BASE_URL + "/projects/" + id))
@@ -130,6 +166,13 @@ System.out.println("koniec zapisu");
     return mapper.readValue(response.body(), CircuitSchematic.class);
 }
 
+/**
+     * Loguje użytkownika w backendzie i zapisuje token JWT.
+     *
+     * @param username nazwa użytkownika
+     * @param password hasło użytkownika
+     * @throws Exception gdy backend zwróci błąd logowania
+     */
 public void login(String username, String password) throws Exception {
 
     String body = mapper.writeValueAsString(Map.of(
@@ -164,9 +207,69 @@ public void login(String username, String password) throws Exception {
     }
 }
 
+/** Flaga trybu gościa — blokuje zapis i odczyt schematów. */
+private boolean guestMode = false;
 
+/** Singleton instancji ApiService. */
+public static ApiService INSTANCE = new ApiService();
 
-  
+/**
+     * Zwraca globalną instancję ApiService.
+     *
+     * @return singleton ApiService
+     */
+public static ApiService get() { return INSTANCE; }
+
+/**
+     * Włącza tryb gościa — blokuje zapis i odczyt schematów.
+     */
+public void setGuestMode() {
+    this.guestMode = true;
+    this.jwtToken = null;
+}
+
+/**
+     * @return true jeśli aplikacja działa w trybie gościa
+     */
+public boolean isGuest() {
+    return guestMode;
+}
+
+/**
+     * Rejestruje nowego użytkownika w backendzie.
+     *
+     * @param username nazwa użytkownika
+     * @param email adres e-mail
+     * @param password hasło
+     * @throws Exception gdy backend zwróci błąd rejestracji
+     */
+public void register(String username, String email, String password) throws Exception {
+    String body = mapper.writeValueAsString(Map.of(
+            "username", username,
+            "email", email,
+            "password", password
+    ));
+
+    HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(BASE_URL + "/auth/register"))
+            .header("Content-Type", "application/json")
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+
+    HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+
+    if (response.statusCode() >= 400) {
+        throw new RuntimeException("Błąd rejestracji: " + response.body());
+    }
+}
+
+/**
+     * Prosta struktura metadanych schematu zwracana przez backend.
+     *
+     * @param id identyfikator schematu
+     * @param name nazwa schematu
+     * @param createdAt data utworzenia
+     */
     public record SchematicMeta(long id, String name, String createdAt) {
         @Override
         public String toString() {

@@ -14,6 +14,6 @@ public record CircuitElement(
         @JsonProperty("y") int y,
         @JsonProperty("rotation") int rotation) {
     public enum ElementType {
-        R, L, C, V, I
+        R, L, C, V, I, GND
     }
 }
