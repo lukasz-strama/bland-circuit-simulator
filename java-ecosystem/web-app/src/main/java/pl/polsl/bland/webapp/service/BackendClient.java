@@ -85,6 +85,37 @@ public class BackendClient {
         backendAuthSession.clear();
     }
 
+    public List<CircuitSchematic> listProjects() {
+        ensureAuthenticated();
+
+        ProjectResponse[] projectResponses = sendJson(
+                buildAuthorizedJsonRequest("/projects")
+                        .GET()
+                        .build(),
+                ProjectResponse[].class,
+                "Nie udało się pobrać listy projektów z backendu.");
+
+        return List.of(projectResponses).stream()
+                .map(this::toCircuitSchematic)
+                .toList();
+    }
+
+    public CircuitSchematic loadProject(Long projectId) {
+        ensureAuthenticated();
+        if (projectId == null) {
+            throw new IllegalStateException("Wybierz projekt do wczytania.");
+        }
+
+        ProjectResponse projectResponse = sendJson(
+                buildAuthorizedJsonRequest("/projects/" + projectId)
+                        .GET()
+                        .build(),
+                ProjectResponse.class,
+                "Nie udało się wczytać projektu z backendu.");
+
+        return toCircuitSchematic(projectResponse);
+    }
+
     public CircuitSchematic saveProject(Long projectId, CircuitSchematic schematic) {
         ensureAuthenticated();
 
@@ -161,6 +192,10 @@ public class BackendClient {
                 ProjectResponse.class,
                 "Backend zwrócił nieprawidłową odpowiedź projektu.");
 
+        return toCircuitSchematic(projectResponse);
+    }
+
+    private CircuitSchematic toCircuitSchematic(ProjectResponse projectResponse) {
         return new CircuitSchematic(
                 projectResponse.id(),
                 projectResponse.name(),

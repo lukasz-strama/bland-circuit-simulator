@@ -3,6 +3,7 @@ package pl.polsl.bland.webapp.service;
 import org.springframework.stereotype.Service;
 import pl.polsl.bland.models.CircuitElement;
 import pl.polsl.bland.models.CircuitSchematic;
+import pl.polsl.bland.models.NetlistParser;
 import pl.polsl.bland.models.SimulationRequest;
 import pl.polsl.bland.models.Wire;
 
@@ -18,6 +19,7 @@ public class WorkspaceExportService {
     private static final double GRID_STEP = 16.0;
     private static final double DEFAULT_TSTOP = 0.008;
     private static final double DEFAULT_TSTEP = 0.0001;
+    private final NetlistParser netlistParser = new NetlistParser();
 
     public CircuitSchematic exportSchematic(
             String name,
@@ -46,14 +48,11 @@ public class WorkspaceExportService {
     }
 
     public String buildEngineNetlist(CircuitSchematic schematic, SimulationRequest request) {
-        StringBuilder builder = new StringBuilder();
-        builder.append("* Bland Circuit Simulator / web-app\n");
-        builder.append("* name=").append(schematic.name()).append('\n');
-        for (CircuitElement element : schematic.elements()) {
-            builder.append(formatElement(element)).append('\n');
+        try {
+            return netlistParser.parse(schematic, request);
+        } catch (NetlistParser.NetlistParseException exception) {
+            throw new IllegalArgumentException(exception.getMessage(), exception);
         }
-        builder.append(formatDirective(request));
-        return builder.toString();
     }
 
     public Map<String, Double> defaultParameters(SimulationRequest.AnalysisType analysisType) {
@@ -104,7 +103,7 @@ public class WorkspaceExportService {
                 null,
                 toGrid(element.left()),
                 toGrid(element.top()),
-                0);
+                element.orientation().degrees());
     }
 
     private CircuitElement createSource(
@@ -127,7 +126,7 @@ public class WorkspaceExportService {
                 frequency,
                 toGrid(element.left()),
                 toGrid(element.top()),
-                0);
+                element.orientation().degrees());
     }
 
     private Wire exportWire(WorkspaceMockService.ResolvedWire wire, WorkspaceMockService.NetTopology topology) {
@@ -138,60 +137,31 @@ public class WorkspaceExportService {
         return new Wire(wire.id(), nodeName, points);
     }
 
-    private String formatElement(CircuitElement element) {
-        return switch (element.type()) {
-            case R -> "RES " + element.id() + " " + element.node1() + " " + element.node2() + " val=" + formatNumber(element.value());
-            case L -> "IND " + element.id() + " " + element.node1() + " " + element.node2() + " val=" + formatNumber(element.value());
-            case C -> "CAP " + element.id() + " " + element.node1() + " " + element.node2() + " val=" + formatNumber(element.value());
-            case V -> formatSource(element, "VSRC");
-            case I -> formatSource(element, "ISRC");
-        };
-    }
-
-    private String formatSource(CircuitElement element, String keyword) {
-        String sourceType = WorkspaceMockService.normalizeSourceType(element.sourceType());
-        StringBuilder builder = new StringBuilder()
-                .append(keyword)
-                .append(' ')
-                .append(element.id())
-                .append(' ')
-                .append(element.node1())
-                .append(' ')
-                .append(element.node2())
-                .append(" type=")
-                .append(sourceType)
-                .append(" val=")
-                .append(formatNumber(element.value()));
-        if (WorkspaceMockService.SOURCE_TYPE_SINE.equals(sourceType) && element.frequency() != null) {
-            builder.append(" freq=").append(formatNumber(element.frequency()));
-        }
-        return builder.toString();
-    }
-
-    private String formatDirective(SimulationRequest request) {
-        if (request.analysisType() == null || request.analysisType() == SimulationRequest.AnalysisType.DC) {
-            return ".SIMULATE type=dc";
-        }
-
-        Map<String, Double> parameters = request.parameters() == null ? Map.of() : request.parameters();
-        double tstop = parameters.getOrDefault("tstop", defaultTransientTstop());
-        double tstep = parameters.getOrDefault("tstep", defaultTransientTstep());
-        return ".SIMULATE type=trans tstop=" + formatNumber(tstop) + " tstep=" + formatNumber(tstep);
-    }
-
-    private String resolveNodeName(WorkspaceMockService.NetTopology topology, WorkspaceMockService.PinRef pinRef) {
-        String netKey = topology.netKey(pinRef);
+    private String resolveNodeName(WorkspaceMockService.NetTopology topology, WorkspaceMockService.WireEndpointRef endpoint) {
+        String netKey = topology.netKey(endpoint);
         if (netKey != null) {
             var net = topology.findNet(netKey).orElse(null);
             if (net != null && net.members().stream().anyMatch(this::isGroundPin)) {
                 return "0";
             }
         }
-        return topology.netName(pinRef, pinRef.elementId() + "_" + pinRef.pinKey());
+        return topology.netName(endpoint, fallbackNodeName(endpoint));
     }
 
-    private boolean isGroundPin(WorkspaceMockService.PinRef pinRef) {
-        return "REF".equals(pinRef.pinKey()) && pinRef.elementId().startsWith("GND");
+    private boolean isGroundPin(WorkspaceMockService.WireEndpointRef endpoint) {
+        return endpoint instanceof WorkspaceMockService.PinRef pinRef
+                && "REF".equals(pinRef.pinKey())
+                && pinRef.elementId().startsWith("GND");
+    }
+
+    private String fallbackNodeName(WorkspaceMockService.WireEndpointRef endpoint) {
+        return switch (endpoint) {
+            case WorkspaceMockService.PinRef pinRef -> pinRef.elementId() + "_" + pinRef.pinKey();
+            case WorkspaceMockService.FreePoint freePoint -> "P_"
+                    + toGrid(freePoint.x())
+                    + "_"
+                    + toGrid(freePoint.y());
+        };
     }
 
     private WorkspaceMockService.PinRef pinA(WorkspaceMockService.WorkspaceElement element) {
@@ -288,10 +258,4 @@ public class WorkspaceExportService {
         return (int) Math.round(coordinate / GRID_STEP);
     }
 
-    private String formatNumber(double value) {
-        if (Math.abs(value - Math.rint(value)) < 0.0000001) {
-            return Long.toString(Math.round(value));
-        }
-        return Double.toString(value);
-    }
 }

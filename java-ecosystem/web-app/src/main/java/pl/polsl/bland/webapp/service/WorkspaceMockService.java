@@ -6,6 +6,7 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -302,16 +303,77 @@ public class WorkspaceMockService {
                 defaultFrequency(type, sourceType));
     }
 
+    public FreePoint createFreePoint(double canvasX, double canvasY) {
+        double x = clamp(snap(canvasX), GRID_LEFT, GRID_RIGHT);
+        double y = clamp(snap(canvasY), GRID_TOP, GRID_BOTTOM);
+        return new FreePoint(x, y);
+    }
+
+    public WorkspaceElement createGroundAtRefPoint(Collection<WorkspaceElement> existingElements, double refX, double refY) {
+        int nextSequence = nextSequence(existingElements, ElementType.GROUND);
+        String nextId = buildElementId(ElementType.GROUND, nextSequence);
+        ElementType type = ElementType.GROUND;
+        Orientation orientation = Orientation.DEG_0;
+        double left = clamp(snap(refX - 46), GRID_LEFT, GRID_RIGHT - type.orientedWidth(orientation));
+        double top = clamp(snap(refY - 6), GRID_TOP, GRID_BOTTOM - type.orientedHeight(orientation));
+        return new WorkspaceElement(
+                nextId,
+                type,
+                left,
+                top,
+                orientation,
+                defaultValue(type),
+                null,
+                null);
+    }
+
+    public Optional<PinRef> resolvePinAt(Map<String, WorkspaceElement> elements, double canvasX, double canvasY) {
+        for (WorkspaceElement element : elements.values()) {
+            for (PinPosition pin : pinsForElement(element)) {
+                if (sameCoordinate(pin.x(), canvasX) && sameCoordinate(pin.y(), canvasY)) {
+                    return Optional.of(new PinRef(pin.elementId(), pin.pinKey()));
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    public List<PinRef> resolvePinsNear(
+            Map<String, WorkspaceElement> elements,
+            double canvasX,
+            double canvasY,
+            double tolerance) {
+        List<NearbyPin> nearbyPins = new ArrayList<>();
+        for (WorkspaceElement element : elements.values()) {
+            for (PinPosition pin : pinsForElement(element)) {
+                double distance = Math.hypot(pin.x() - canvasX, pin.y() - canvasY);
+                if (distance <= tolerance) {
+                    nearbyPins.add(new NearbyPin(new PinRef(pin.elementId(), pin.pinKey()), distance));
+                }
+            }
+        }
+        nearbyPins.sort(Comparator.comparingDouble(NearbyPin::distance));
+        return nearbyPins.stream()
+                .map(NearbyPin::pinRef)
+                .toList();
+    }
+
+    public WireEndpointRef resolveEndpointAt(Map<String, WorkspaceElement> elements, double canvasX, double canvasY) {
+        return resolvePinAt(elements, canvasX, canvasY)
+                .<WireEndpointRef>map(pinRef -> pinRef)
+                .orElseGet(() -> createFreePoint(canvasX, canvasY));
+    }
+
     public Optional<WorkspaceWire> createWire(
             Map<String, WorkspaceElement> elements,
             Collection<WorkspaceWire> existingWires,
-            PinRef start,
-            PinRef end) {
-        if (start.equals(end) || resolvePin(elements, start).isEmpty() || resolvePin(elements, end).isEmpty()) {
+            WireEndpointRef start,
+            WireEndpointRef end) {
+        if (start.equals(end) || resolveEndpoint(elements, start).isEmpty() || resolveEndpoint(elements, end).isEmpty()) {
             return Optional.empty();
         }
 
-        boolean duplicate = existingWires.stream().anyMatch(wire -> connectsSamePins(wire, start, end));
+        boolean duplicate = existingWires.stream().anyMatch(wire -> connectsSameEndpoints(wire, start, end));
         if (duplicate) {
             return Optional.empty();
         }
@@ -324,20 +386,20 @@ public class WorkspaceMockService {
             Collection<WorkspaceWire> existingWires,
             WorkspaceWire wire,
             WireEndpoint endpoint,
-            PinRef replacementPin) {
+            WireEndpointRef replacementEndpoint) {
         if (wire == null || endpoint == null) {
             return Optional.empty();
         }
 
-        PinRef start = endpoint == WireEndpoint.START ? replacementPin : wire.start();
-        PinRef end = endpoint == WireEndpoint.END ? replacementPin : wire.end();
-        if (start.equals(end) || resolvePin(elements, start).isEmpty() || resolvePin(elements, end).isEmpty()) {
+        WireEndpointRef start = endpoint == WireEndpoint.START ? replacementEndpoint : wire.start();
+        WireEndpointRef end = endpoint == WireEndpoint.END ? replacementEndpoint : wire.end();
+        if (start.equals(end) || resolveEndpoint(elements, start).isEmpty() || resolveEndpoint(elements, end).isEmpty()) {
             return Optional.empty();
         }
 
         boolean duplicate = existingWires.stream()
                 .filter(existing -> !existing.id().equals(wire.id()))
-                .anyMatch(existing -> connectsSamePins(existing, start, end));
+                .anyMatch(existing -> connectsSameEndpoints(existing, start, end));
         if (duplicate) {
             return Optional.empty();
         }
@@ -493,39 +555,43 @@ public class WorkspaceMockService {
             Map<String, WorkspaceElement> elements,
             Collection<WorkspaceWire> wires,
             Map<String, String> aliases) {
-        LinkedHashMap<PinRef, PinPosition> pins = new LinkedHashMap<>();
-        LinkedHashMap<PinRef, List<PinRef>> adjacency = new LinkedHashMap<>();
+        LinkedHashMap<WireEndpointRef, EndpointPosition> endpoints = new LinkedHashMap<>();
+        LinkedHashMap<WireEndpointRef, List<WireEndpointRef>> adjacency = new LinkedHashMap<>();
 
         for (WorkspaceElement element : elements.values()) {
             for (PinPosition pin : pinsForElement(element)) {
                 PinRef pinRef = new PinRef(pin.elementId(), pin.pinKey());
-                pins.put(pinRef, pin);
+                endpoints.put(pinRef, endpointPosition(pinRef, pin));
                 adjacency.put(pinRef, new ArrayList<>());
             }
         }
 
         for (WorkspaceWire wire : wires) {
-            if (!pins.containsKey(wire.start()) || !pins.containsKey(wire.end())) {
+            Optional<EndpointPosition> start = resolveEndpoint(elements, wire.start());
+            Optional<EndpointPosition> end = resolveEndpoint(elements, wire.end());
+            if (start.isEmpty() || end.isEmpty()) {
                 continue;
             }
-            adjacency.get(wire.start()).add(wire.end());
-            adjacency.get(wire.end()).add(wire.start());
+            endpoints.putIfAbsent(wire.start(), start.get());
+            endpoints.putIfAbsent(wire.end(), end.get());
+            adjacency.computeIfAbsent(wire.start(), ignored -> new ArrayList<>()).add(wire.end());
+            adjacency.computeIfAbsent(wire.end(), ignored -> new ArrayList<>()).add(wire.start());
         }
 
-        LinkedHashMap<PinRef, String> pinNetNames = new LinkedHashMap<>();
-        LinkedHashMap<PinRef, String> pinNetKeys = new LinkedHashMap<>();
+        LinkedHashMap<WireEndpointRef, String> endpointNetNames = new LinkedHashMap<>();
+        LinkedHashMap<WireEndpointRef, String> endpointNetKeys = new LinkedHashMap<>();
         LinkedHashMap<String, ResolvedNet> netsByKey = new LinkedHashMap<>();
         List<ResolvedNet> nets = new ArrayList<>();
-        Set<PinRef> visited = new LinkedHashSet<>();
+        Set<WireEndpointRef> visited = new LinkedHashSet<>();
         Set<String> usedNames = new LinkedHashSet<>();
         int nextGenericIndex = 1;
 
-        for (PinRef start : pins.keySet()) {
+        for (WireEndpointRef start : endpoints.keySet()) {
             if (visited.contains(start)) {
                 continue;
             }
 
-            List<PinRef> component = collectConnectedPins(start, adjacency, visited);
+            List<WireEndpointRef> component = collectConnectedEndpoints(start, adjacency, visited);
             String netKey = buildNetKey(component);
             String preferredName = preferredNetName(component, elements);
             String aliasName = aliases.get(netKey);
@@ -538,16 +604,16 @@ public class WorkspaceMockService {
 
             usedNames.add(netName);
             String resolvedNetName = netName;
-            component.forEach(pin -> {
-                pinNetNames.put(pin, resolvedNetName);
-                pinNetKeys.put(pin, netKey);
+            component.forEach(endpoint -> {
+                endpointNetNames.put(endpoint, resolvedNetName);
+                endpointNetKeys.put(endpoint, netKey);
             });
-            ResolvedNet resolvedNet = createResolvedNet(netKey, resolvedNetName, component, pins);
+            ResolvedNet resolvedNet = createResolvedNet(netKey, resolvedNetName, component, endpoints);
             nets.add(resolvedNet);
             netsByKey.put(netKey, resolvedNet);
         }
 
-        return new NetTopology(pinNetNames, pinNetKeys, netsByKey, nets);
+        return new NetTopology(endpointNetNames, endpointNetKeys, netsByKey, nets);
     }
 
     public Optional<ElementDetails> describeElement(
@@ -567,8 +633,8 @@ public class WorkspaceMockService {
             WorkspaceWire wire,
             WireRoutingMode routingMode) {
         return resolveWire(elements, wire, routingMode).map(resolvedWire -> {
-            String startPin = formatPin(wire.start());
-            String endPin = formatPin(wire.end());
+            String startPin = formatEndpoint(wire.start());
+            String endPin = formatEndpoint(wire.end());
             String startNet = topology.netName(wire.start(), "?");
             String endNet = topology.netName(wire.end(), "?");
             String geometry = describeWireGeometry(resolvedWire);
@@ -599,7 +665,7 @@ public class WorkspaceMockService {
     }
 
     public boolean isWireAttachedToElement(WorkspaceWire wire, String elementId) {
-        return wire.start().elementId().equals(elementId) || wire.end().elementId().equals(elementId);
+        return isEndpointAttachedToElement(wire.start(), elementId) || isEndpointAttachedToElement(wire.end(), elementId);
     }
 
     public String summarizeNets(NetTopology topology) {
@@ -663,8 +729,8 @@ public class WorkspaceMockService {
             Map<String, WorkspaceElement> elements,
             WorkspaceWire wire,
             WireRoutingMode routingMode) {
-        Optional<PinPosition> start = resolvePin(elements, wire.start());
-        Optional<PinPosition> end = resolvePin(elements, wire.end());
+        Optional<EndpointPosition> start = resolveEndpoint(elements, wire.start());
+        Optional<EndpointPosition> end = resolveEndpoint(elements, wire.end());
         if (start.isEmpty() || end.isEmpty()) {
             return Optional.empty();
         }
@@ -683,19 +749,19 @@ public class WorkspaceMockService {
         return Optional.of(new ResolvedWire(wire.id(), wire.start(), wire.end(), segments, path));
     }
 
-    private List<PinRef> collectConnectedPins(
-            PinRef start,
-            Map<PinRef, List<PinRef>> adjacency,
-            Set<PinRef> visited) {
-        ArrayDeque<PinRef> queue = new ArrayDeque<>();
-        List<PinRef> connected = new ArrayList<>();
+    private List<WireEndpointRef> collectConnectedEndpoints(
+            WireEndpointRef start,
+            Map<WireEndpointRef, List<WireEndpointRef>> adjacency,
+            Set<WireEndpointRef> visited) {
+        ArrayDeque<WireEndpointRef> queue = new ArrayDeque<>();
+        List<WireEndpointRef> connected = new ArrayList<>();
         queue.add(start);
         visited.add(start);
 
         while (!queue.isEmpty()) {
-            PinRef current = queue.removeFirst();
+            WireEndpointRef current = queue.removeFirst();
             connected.add(current);
-            for (PinRef next : adjacency.getOrDefault(current, List.of())) {
+            for (WireEndpointRef next : adjacency.getOrDefault(current, List.of())) {
                 if (visited.add(next)) {
                     queue.addLast(next);
                 }
@@ -705,10 +771,14 @@ public class WorkspaceMockService {
         return connected;
     }
 
-    private ResolvedNet createResolvedNet(String netKey, String netName, List<PinRef> component, Map<PinRef, PinPosition> pins) {
-        PinPosition anchor = null;
-        for (PinRef pinRef : component) {
-            PinPosition candidate = pins.get(pinRef);
+    private ResolvedNet createResolvedNet(
+            String netKey,
+            String netName,
+            List<WireEndpointRef> component,
+            Map<WireEndpointRef, EndpointPosition> endpoints) {
+        EndpointPosition anchor = null;
+        for (WireEndpointRef endpoint : component) {
+            EndpointPosition candidate = endpoints.get(endpoint);
             if (candidate == null) {
                 continue;
             }
@@ -724,9 +794,9 @@ public class WorkspaceMockService {
         return new ResolvedNet(netKey, netName, List.copyOf(component), labelX, labelY);
     }
 
-    private String buildNetKey(List<PinRef> component) {
+    private String buildNetKey(List<WireEndpointRef> component) {
         return component.stream()
-                .map(pin -> pin.elementId() + ":" + pin.pinKey())
+                .map(WireEndpointRef::key)
                 .sorted()
                 .reduce((left, right) -> left + "|" + right)
                 .orElse("net-empty");
@@ -737,11 +807,14 @@ public class WorkspaceMockService {
         return candidate.isBlank() ? defaultValue(type) : candidate;
     }
 
-    private String formatPin(PinRef pinRef) {
-        return pinRef.elementId() + ":" + pinRef.pinKey();
+    private String formatEndpoint(WireEndpointRef endpoint) {
+        return switch (endpoint) {
+            case PinRef pinRef -> pinRef.elementId() + ":" + pinRef.pinKey();
+            case FreePoint freePoint -> "punkt " + formatCoordinate(freePoint.x()) + "," + formatCoordinate(freePoint.y());
+        };
     }
 
-    private String preferredNetName(List<PinRef> component, Map<String, WorkspaceElement> elements) {
+    private String preferredNetName(List<WireEndpointRef> component, Map<String, WorkspaceElement> elements) {
         if (containsPin(component, elements, ElementType.GROUND, "REF")) {
             return "0";
         }
@@ -763,14 +836,17 @@ public class WorkspaceMockService {
         return null;
     }
 
-    private boolean containsPin(List<PinRef> component, Map<String, WorkspaceElement> elements, ElementType type, String pinKey) {
-        return component.stream().anyMatch(pinRef -> {
+    private boolean containsPin(List<WireEndpointRef> component, Map<String, WorkspaceElement> elements, ElementType type, String pinKey) {
+        return component.stream()
+                .filter(PinRef.class::isInstance)
+                .map(PinRef.class::cast)
+                .anyMatch(pinRef -> {
             WorkspaceElement element = elements.get(pinRef.elementId());
             return element != null && element.type() == type && pinRef.pinKey().equals(pinKey);
         });
     }
 
-    private List<WirePoint> route(PinPosition start, PinPosition end, WireRoutingMode routingMode) {
+    private List<WirePoint> route(EndpointPosition start, EndpointPosition end, WireRoutingMode routingMode) {
         if (routingMode == WireRoutingMode.STRAIGHT) {
             return List.of(new WirePoint(start.x(), start.y()), new WirePoint(end.x(), end.y()));
         }
@@ -820,6 +896,21 @@ public class WorkspaceMockService {
             return "odcinek prosty";
         }
         return "łamany / " + resolvedWire.segments().size() + " segmenty";
+    }
+
+    private Optional<EndpointPosition> resolveEndpoint(Map<String, WorkspaceElement> elements, WireEndpointRef endpoint) {
+        return switch (endpoint) {
+            case PinRef pinRef -> resolvePin(elements, pinRef).map(pin -> endpointPosition(pinRef, pin));
+            case FreePoint freePoint -> Optional.of(endpointPosition(freePoint));
+        };
+    }
+
+    private static EndpointPosition endpointPosition(PinRef pinRef, PinPosition pin) {
+        return new EndpointPosition(pinRef, pin.x(), pin.y(), pin.direction());
+    }
+
+    private static EndpointPosition endpointPosition(FreePoint freePoint) {
+        return new EndpointPosition(freePoint, freePoint.x(), freePoint.y(), null);
     }
 
     private Optional<PinPosition> resolvePin(Map<String, WorkspaceElement> elements, PinRef pinRef) {
@@ -1018,6 +1109,13 @@ public class WorkspaceMockService {
         return Double.toString(value);
     }
 
+    private static String formatCoordinate(double value) {
+        if (Math.abs(value - Math.rint(value)) < 0.0000001) {
+            return Long.toString(Math.round(value));
+        }
+        return String.format(java.util.Locale.US, "%.2f", value);
+    }
+
     private static double defaultSineFrequency(ElementType type) {
         return type == ElementType.VOLTAGE ? 1000.0 : 50.0;
     }
@@ -1045,12 +1143,16 @@ public class WorkspaceMockService {
                 baseDirection.rotate(element.orientation()));
     }
 
-    private static boolean connectsSamePins(WorkspaceWire wire, PinRef start, PinRef end) {
+    private static boolean isEndpointAttachedToElement(WireEndpointRef endpoint, String elementId) {
+        return endpoint instanceof PinRef pinRef && pinRef.elementId().equals(elementId);
+    }
+
+    private static boolean connectsSameEndpoints(WorkspaceWire wire, WireEndpointRef start, WireEndpointRef end) {
         return (wire.start().equals(start) && wire.end().equals(end))
                 || (wire.start().equals(end) && wire.end().equals(start));
     }
 
-    private static boolean sameAxis(PinPosition start, PinPosition end) {
+    private static boolean sameAxis(EndpointPosition start, EndpointPosition end) {
         return sameCoordinate(start.x(), end.x()) || sameCoordinate(start.y(), end.y());
     }
 
@@ -1123,19 +1225,19 @@ public class WorkspaceMockService {
         return normalized;
     }
 
-    private static RouteScore scoreRoute(PinPosition start, PinPosition end, List<WirePoint> path) {
+    private static RouteScore scoreRoute(EndpointPosition start, EndpointPosition end, List<WirePoint> path) {
         PinDirection departure = segmentDirection(path.get(0), path.get(1));
         PinDirection arrival = segmentDirection(path.get(path.size() - 2), path.get(path.size() - 1));
 
-        boolean inwardDeparture = departure != null && departure == opposite(start.direction());
-        boolean inwardArrival = arrival != null && arrival == end.direction();
+        boolean inwardDeparture = start.direction() != null && departure != null && departure == opposite(start.direction());
+        boolean inwardArrival = end.direction() != null && arrival != null && arrival == end.direction();
         int inwardPenalty = (inwardDeparture ? 1 : 0) + (inwardArrival ? 1 : 0);
 
         int preferencePenalty = 0;
-        if (departure != null && departure != start.direction()) {
+        if (start.direction() != null && departure != null && departure != start.direction()) {
             preferencePenalty++;
         }
-        if (arrival != null && arrival != opposite(end.direction())) {
+        if (end.direction() != null && arrival != null && arrival != opposite(end.direction())) {
             preferencePenalty++;
         }
 
@@ -1328,10 +1430,25 @@ public class WorkspaceMockService {
         }
     }
 
-    public record PinRef(String elementId, String pinKey) {
+    public sealed interface WireEndpointRef permits PinRef, FreePoint {
+        String key();
     }
 
-    public record WorkspaceWire(String id, PinRef start, PinRef end) {
+    public record PinRef(String elementId, String pinKey) implements WireEndpointRef {
+        @Override
+        public String key() {
+            return "pin:" + elementId + ":" + pinKey;
+        }
+    }
+
+    public record FreePoint(double x, double y) implements WireEndpointRef {
+        @Override
+        public String key() {
+            return "point:" + formatCoordinate(x) + ":" + formatCoordinate(y);
+        }
+    }
+
+    public record WorkspaceWire(String id, WireEndpointRef start, WireEndpointRef end) {
     }
 
     public enum WireEndpoint {
@@ -1392,6 +1509,12 @@ public class WorkspaceMockService {
     public record PinPosition(String elementId, String pinKey, double x, double y, PinDirection direction) {
     }
 
+    private record EndpointPosition(WireEndpointRef endpoint, double x, double y, PinDirection direction) {
+    }
+
+    private record NearbyPin(PinRef pinRef, double distance) {
+    }
+
     public record WirePoint(double x, double y) {
     }
 
@@ -1400,8 +1523,8 @@ public class WorkspaceMockService {
 
     public record ResolvedWire(
             String id,
-            PinRef start,
-            PinRef end,
+            WireEndpointRef start,
+            WireEndpointRef end,
             List<WireSegment> segments,
             List<WirePoint> nodes) {
     }
@@ -1409,26 +1532,26 @@ public class WorkspaceMockService {
     public record ResolvedNet(
             String key,
             String name,
-            List<PinRef> members,
+            List<WireEndpointRef> members,
             double labelX,
             double labelY) {
     }
 
     public record NetTopology(
-            Map<PinRef, String> pinNetNames,
-            Map<PinRef, String> pinNetKeys,
+            Map<WireEndpointRef, String> endpointNetNames,
+            Map<WireEndpointRef, String> endpointNetKeys,
             Map<String, ResolvedNet> netsByKey,
             List<ResolvedNet> nets) {
         public static NetTopology empty() {
             return new NetTopology(Map.of(), Map.of(), Map.of(), List.of());
         }
 
-        public String netName(PinRef pinRef, String fallback) {
-            return pinNetNames.getOrDefault(pinRef, fallback);
+        public String netName(WireEndpointRef endpoint, String fallback) {
+            return endpointNetNames.getOrDefault(endpoint, fallback);
         }
 
-        public String netKey(PinRef pinRef) {
-            return pinNetKeys.get(pinRef);
+        public String netKey(WireEndpointRef endpoint) {
+            return endpointNetKeys.get(endpoint);
         }
 
         public Optional<ResolvedNet> findNet(String netKey) {

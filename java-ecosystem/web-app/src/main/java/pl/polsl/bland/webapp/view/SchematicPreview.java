@@ -26,11 +26,14 @@ public final class SchematicPreview extends Div {
     private static final String CANVAS_Y_DATA = "event.clientY - event.currentTarget.getBoundingClientRect().top";
 
     private final Div dynamicLayer = area("sheet-layer is-dynamic", 0, 0, 1280, 860);
+    private final Span titleBlockProjectText = titleText(14, 8, 364, "Projekt: filtr_rlc_lab.asc");
     private final Map<String, Div> selectableParts = new LinkedHashMap<>();
     private final Map<String, Div> selectableWires = new LinkedHashMap<>();
     private final Map<String, Div> selectablePins = new LinkedHashMap<>();
     private final Map<String, Span> selectableNets = new LinkedHashMap<>();
     private String draggedElementId;
+    private Div pendingFreePointMarker;
+    private Div focusedFreePointMarker;
 
     public SchematicPreview(InteractionHandler interactionHandler) {
         addClassName("sheet-stage");
@@ -46,6 +49,8 @@ public final class SchematicPreview extends Div {
         selectablePins.clear();
         selectableNets.clear();
         dynamicLayer.removeAll();
+        pendingFreePointMarker = null;
+        focusedFreePointMarker = null;
         wires.forEach(wire -> dynamicLayer.add(createWireAssembly(wire)));
         nets.forEach(net -> dynamicLayer.add(netLabel(net)));
         elements.forEach(element -> dynamicLayer.add(createElementPart(element)));
@@ -62,14 +67,23 @@ public final class SchematicPreview extends Div {
         }
     }
 
-    public void setPendingWireStart(WorkspaceMockService.PinRef pinRef) {
+    public void setPendingWireStart(WorkspaceMockService.WireEndpointRef endpoint) {
         selectablePins.values().forEach(pin -> pin.removeClassName("is-pending"));
-        if (pinRef == null) {
+        removeMarker(pendingFreePointMarker);
+        pendingFreePointMarker = null;
+        if (endpoint == null) {
             return;
         }
-        Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
-        if (pin != null) {
-            pin.addClassName("is-pending");
+        if (endpoint instanceof WorkspaceMockService.PinRef pinRef) {
+            Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
+            if (pin != null) {
+                pin.addClassName("is-pending");
+            }
+            return;
+        }
+        if (endpoint instanceof WorkspaceMockService.FreePoint freePoint) {
+            pendingFreePointMarker = freePointMarker(freePoint, "wire-free-point is-pending");
+            dynamicLayer.add(pendingFreePointMarker);
         }
     }
 
@@ -84,14 +98,23 @@ public final class SchematicPreview extends Div {
         }
     }
 
-    public void setFocusedPin(WorkspaceMockService.PinRef pinRef) {
+    public void setFocusedEndpoint(WorkspaceMockService.WireEndpointRef endpoint) {
         selectablePins.values().forEach(pin -> pin.removeClassName("is-focused-endpoint"));
-        if (pinRef == null) {
+        removeMarker(focusedFreePointMarker);
+        focusedFreePointMarker = null;
+        if (endpoint == null) {
             return;
         }
-        Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
-        if (pin != null) {
-            pin.addClassName("is-focused-endpoint");
+        if (endpoint instanceof WorkspaceMockService.PinRef pinRef) {
+            Div pin = selectablePins.get(pinToken(pinRef.elementId(), pinRef.pinKey()));
+            if (pin != null) {
+                pin.addClassName("is-focused-endpoint");
+            }
+            return;
+        }
+        if (endpoint instanceof WorkspaceMockService.FreePoint freePoint) {
+            focusedFreePointMarker = freePointMarker(freePoint, "wire-free-point is-focused-endpoint");
+            dynamicLayer.add(focusedFreePointMarker);
         }
     }
 
@@ -115,6 +138,10 @@ public final class SchematicPreview extends Div {
         if (draggedPart != null) {
             draggedPart.addClassName("is-dragging");
         }
+    }
+
+    public void setWorkspaceName(String name) {
+        titleBlockProjectText.setText("Projekt: " + (name == null || name.isBlank() ? "Bez nazwy" : name.trim()));
     }
 
     private Component createSheetNote() {
@@ -207,7 +234,10 @@ public final class SchematicPreview extends Div {
 
         String wireId = event.getEventData().getString(CLICKED_WIRE_DATA);
         if (wireId != null && !wireId.isBlank()) {
-            interactionHandler.onWireClick(wireId);
+            interactionHandler.onWireClick(
+                    wireId,
+                    event.getEventData().getNumber(CANVAS_X_DATA),
+                    event.getEventData().getNumber(CANVAS_Y_DATA));
             return;
         }
 
@@ -237,7 +267,7 @@ public final class SchematicPreview extends Div {
                 hLine("title-divider", 0, 56, 392),
                 vLine("title-divider is-vertical", 298, 28, 58),
                 vLine("title-divider is-vertical", 332, 56, 30),
-                titleText(14, 8, 364, "Projekt: Filtr RLC - ćwiczenie 04"),
+                titleBlockProjectText,
                 titleText(14, 36, 276, "Autor: Laboratorium EE / grupa A2"),
                 titleText(308, 36, 76, "Arkusz: 1 / 1"),
                 titleText(14, 64, 310, "Tryb: makieta edytowalna"),
@@ -251,7 +281,7 @@ public final class SchematicPreview extends Div {
                 text("sheet-text is-note", 84, 68,
                         "Kliknij szybki komponent, aby przejść do trybu wstawiania i dodawać elementy na arkuszu."),
                 text("sheet-text is-note", 84, 86,
-                        "Tryb przewodów łączy teraz piny elementów i aktualizuje połączenia po przesunięciu komponentu."));
+                        "Tryb przewodów obsługuje piny elementów oraz punkty siatki."));
         return layer;
     }
 
@@ -482,6 +512,16 @@ public final class SchematicPreview extends Div {
         return area("wire-junction", centerX - 4, centerY - 4, 8, 8);
     }
 
+    private static Div freePointMarker(WorkspaceMockService.FreePoint freePoint, String className) {
+        return area(className, freePoint.x() - 6, freePoint.y() - 6, 12, 12);
+    }
+
+    private static void removeMarker(Div marker) {
+        if (marker != null) {
+            marker.removeFromParent();
+        }
+    }
+
     private static Svg symbol(String svgMarkup, double left, double top, double width, double height) {
         Svg svg = new Svg();
         svg.addClassName("schematic-symbol");
@@ -590,6 +630,6 @@ public final class SchematicPreview extends Div {
 
         void onNetClick(String netKey);
 
-        void onWireClick(String wireId);
+        void onWireClick(String wireId, double canvasX, double canvasY);
     }
 }

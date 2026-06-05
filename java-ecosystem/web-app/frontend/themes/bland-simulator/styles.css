@@ -89,8 +89,24 @@ body {
   margin-left: auto;
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
   color: var(--text-dim);
+  font-size: 11px;
+}
+
+.menu-meta-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.menu-meta-label {
+  white-space: nowrap;
+}
+
+vaadin-text-field.workspace-name-field {
+  width: 190px;
   font-size: 11px;
 }
 
@@ -197,10 +213,6 @@ body {
   text-overflow: ellipsis;
 }
 
-.toolbar-readout.is-analysis-summary {
-  max-width: 320px;
-}
-
 vaadin-select.toolbar-select {
   width: 176px;
 }
@@ -271,17 +283,6 @@ vaadin-text-field.source-frequency-field {
   user-select: none;
   overflow-x: auto;
   overflow-y: hidden;
-}
-
-.componentbar-group.is-fill {
-  flex: 1;
-  min-width: 180px;
-}
-
-vaadin-text-field.component-search {
-  height: 26px;
-  min-width: 240px;
-  max-width: 420px;
 }
 
 .quick-component-icon,
@@ -356,8 +357,20 @@ vaadin-text-field.component-search {
   width: 32px;
   height: 32px;
   padding: 0;
-  font-size: 12px;
-  font-weight: 700;
+  color: #304a67;
+}
+
+.rail-button-icon {
+  display: block;
+  width: 19px;
+  height: 19px;
+  color: currentColor;
+  pointer-events: none;
+}
+
+.rail-button:hover .rail-button-icon,
+.rail-button.is-active .rail-button-icon {
+  color: var(--accent-strong);
 }
 
 .workspace-panel {
@@ -1053,10 +1066,13 @@ vaadin-select.trace-select {
 }
 
 .workspace-panel[data-tool="select"] .wire-segment,
-.workspace-panel[data-tool="wire"] .wire-segment,
 .workspace-panel[data-tool="select"] .wire-junction,
 .workspace-panel[data-tool="wire"] .wire-junction {
   cursor: pointer;
+}
+
+.workspace-panel[data-tool="wire"] .wire-segment {
+  cursor: crosshair;
 }
 
 .workspace-panel[data-tool="delete"] .wire-segment,
@@ -1069,6 +1085,25 @@ vaadin-select.trace-select {
   border-color: #2d6aa1;
   background: #dbeaf8;
   box-shadow: 0 0 0 3px rgba(45, 106, 161, 0.18);
+}
+
+.wire-free-point {
+  border: 2px solid #2d6aa1;
+  border-radius: 50%;
+  background: #f8fbff;
+  box-sizing: border-box;
+  pointer-events: none;
+}
+
+.wire-free-point.is-pending {
+  background: #dbeaf8;
+  box-shadow: 0 0 0 3px rgba(45, 106, 161, 0.18);
+}
+
+.wire-free-point.is-focused-endpoint {
+  border-color: #b96a1c;
+  background: #fff3e5;
+  box-shadow: 0 0 0 4px rgba(185, 106, 28, 0.18);
 }
 
 .wire-pin.is-focused-endpoint {
