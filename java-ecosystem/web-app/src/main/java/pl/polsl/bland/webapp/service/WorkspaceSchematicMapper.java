@@ -296,6 +296,7 @@ public class WorkspaceSchematicMapper {
             case C -> WorkspaceMockService.ElementType.CAPACITOR;
             case V -> WorkspaceMockService.ElementType.VOLTAGE;
             case I -> WorkspaceMockService.ElementType.CURRENT;
+            default -> throw new IllegalArgumentException("Unknown element type: " + type);
         };
     }
 

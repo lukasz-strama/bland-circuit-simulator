@@ -39,6 +39,7 @@ public class NetlistBuilder {
             String n2 = flipped ? el.node1() : el.node2();
             yield "ISRC " + el.id() + " " + n1 + " " + n2 + " type=dc val=" + el.value();
         }
+        default -> throw new IllegalArgumentException("Unknown element type: " + el.type());
         };
     }
 
